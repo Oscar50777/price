@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Принт Студия — калькулятор полиграфии</title>
+  <link rel="stylesheet" href="styles.css?v=1">
+  <script defer src="prices.js"></script>
+  <script defer src="calculator.js?v=1"></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">П</span>
+      <div>
+        <strong>Принт Студия</strong>
+        <small>Калькулятор полиграфии</small>
+      </div>
+    </div>
+
+    <div class="sidebar-body">
+      <div class="workspace-label">
+        Рабочее пространство
+        <span class="status-dot"></span>
+      </div>
+
+      <nav id="productNav" aria-label="Выбор изделия"></nav>
+
+      <div class="nav-group">
+        <div class="nav-title">Работа с заказами</div>
+        <button class="nav-item" data-action="saved-open">
+          <span class="nav-symbol">▤</span>
+          Сохранённые расчёты
+          <span id="savedCount" class="nav-count">0</span>
+        </button>
+        <button class="nav-item" data-action="templates-open">
+          <span class="nav-symbol">▦</span>
+          Шаблоны
+        </button>
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <button class="nav-item" data-action="rates-open">
+        <span class="nav-symbol">≡</span>
+        Тарифы и данные
+      </button>
+      <div class="local-status">
+        <span class="status-dot"></span>
+        <span id="sidebarVersion">Загрузка тарифов…</span>
+      </div>
+    </div>
+  </aside>
+
+  <div class="app">
+    <header class="topbar">
+      <div class="breadcrumbs">
+        <span>Калькулятор</span>
+        <span class="separator">/</span>
+        <strong>Новый расчёт</strong>
+      </div>
+      <div class="topbar-actions">
+        <button class="button compact" data-action="saved-open">
+          Расчёты <span id="savedCountTop">0</span>
+        </button>
+        <button class="button compact" id="proButton"
+                data-action="pro-toggle" aria-pressed="false">
+          Проф. режим
+        </button>
+      </div>
+    </header>
+
+    <main class="content">
+      <div class="page-heading">
+        <div>
+          <div class="eyebrow" id="productGroup">Печатная продукция</div>
+          <h1 id="productTitle">Калькулятор</h1>
+          <p class="subtitle" id="productHint"></p>
+        </div>
+        <button class="button quiet" data-action="reset">↺ Сбросить</button>
+      </div>
+
+      <div class="mobile-catalog">
+        <label class="field">
+          <span>Изделие</span>
+          <select id="mobileProduct"></select>
+        </label>
+      </div>
+
+      <div id="archiveBanner" class="notice warning" hidden></div>
+      <div id="demoBanner" class="notice" hidden>
+        В справочнике отмечены демонстрационные тарифы.
+        Перед работой проверьте цены и измените
+        <code>meta.demo</code> в файле <code>prices.js</code>.
+      </div>
+
+      <div class="workspace">
+        <div class="form-column">
+          <section class="card">
+            <div class="card-header">
+              <div class="section-title">
+                <span class="section-number">01</span>
+                <h2>Параметры заказа</h2>
+              </div>
+              <button class="text-button" data-action="template-save">
+                В шаблон
+              </button>
+            </div>
+            <div class="card-body" id="orderForm"></div>
+          </section>
+
+          <section class="card" id="componentsCard">
+            <div class="card-header">
+              <div class="section-title">
+                <span class="section-number">02</span>
+                <h2>Материал, печать и отделка</h2>
+              </div>
+              <button class="text-button" id="addComponent"
+                      data-action="component-add" hidden>
+                + Компонент
+              </button>
+            </div>
+            <div class="card-body" id="components"></div>
+          </section>
+
+          <section class="card" id="assemblyCard" hidden>
+            <div class="card-header">
+              <div class="section-title">
+                <span class="section-number">03</span>
+                <h2>Сборка и комплектующие</h2>
+              </div>
+            </div>
+            <div class="card-body" id="assembly"></div>
+          </section>
+
+          <details class="foldout" id="commentDetails">
+            <summary>Комментарий к заказу</summary>
+            <div class="foldout-body">
+              <label class="field">
+                <span class="sr-only">Комментарий</span>
+                <textarea id="orderNote" data-path="note"
+                  placeholder="Сроки, пожелания и особенности макета…"></textarea>
+              </label>
+            </div>
+          </details>
+
+          <details class="foldout">
+            <summary>Правила и ограничения</summary>
+            <div class="foldout-body muted">
+              <p>
+                Расчёт предварительный. Материалы, оборудование,
+                раскладку и макет проверяет технолог.
+              </p>
+              <p>
+                Прямоугольная раскладка проверяет две ориентации.
+                Смешанное размещение, направление волокна,
+                захват машины и производственный спуск полос
+                не рассчитываются.
+              </p>
+              <p>
+                Брошюра задаётся в готовом размере страницы;
+                расчёт выполняется по разворотам. Полосы блока
+                задаются без обложки, кратно четырём.
+              </p>
+              <p>
+                Число изделий на штампе задаётся вручную.
+                Совместимость штампа с раскладкой нужно проверить.
+                Биговку, входящую в вырубку, не добавляйте повторно.
+              </p>
+              <p>
+                Плоттер рассчитывается по секциям 320×450 мм,
+                без оценки сложности контура. Приладочный запас
+                не отправляется на плоттер.
+              </p>
+              <p>
+                Прибыль указана до налогов и неучтённых расходов.
+                НДС отдельно не выделяется. УФ использует
+                продажные тарифы без общей наценки.
+              </p>
+              <p>
+                Сохранённые расчёты и шаблоны хранятся в этом браузере.
+                Для переноса используйте экспорт.
+                Профессиональный режим не защищает тарифы от просмотра.
+              </p>
+            </div>
+          </details>
+        </div>
+
+        <aside class="result-column">
+          <section class="card result-card" id="order-result">
+            <div id="results" aria-live="polite">
+              <div class="card-body">
+                Загрузка…
+                <noscript>
+                  Для работы калькулятора необходимо включить JavaScript.
+                </noscript>
+              </div>
+            </div>
+          </section>
+
+          <div id="professionalResults"></div>
+        </aside>
+      </div>
+
+      <footer class="page-footer">
+        <span>Принт Студия · локальное хранение расчётов</span>
+        <span id="footerVersion"></span>
+      </footer>
+    </main>
+  </div>
+
+  <div class="mobile-total" id="mobileTotal">
+    <div>
+      <strong id="mobilePrice">—</strong>
+      <small id="mobileUnit">Укажите параметры</small>
+    </div>
+    <a class="button primary" href="#order-result">Итог заказа</a>
+  </div>
+
+  <dialog id="managerDialog">
+    <div class="dialog-header">
+      <h2 id="dialogTitle"></h2>
+      <button class="button compact" data-action="dialog-close"
+              aria-label="Закрыть окно">✕</button>
+    </div>
+    <div class="dialog-body" id="dialogBody"></div>
+  </dialog>
+
+  <input id="importFile" type="file" accept=".json,application/json" hidden>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>
