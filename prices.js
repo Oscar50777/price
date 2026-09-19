@@ -235,7 +235,7 @@ window.PRINT_PRICES = {
 
   // Специальные приладки.
   policy: {
-    scope: "all", // "all" или "offset"
+    scope: "offset",
 
     notebook10: 3000,
     notebook40: 5000,
