@@ -4031,9 +4031,515 @@
           setFormat(button.dataset.scope, button.dataset.value);
           break;
 
-        case "bag-preset":
+                case "bag-preset":
           Object.assign(
             order.bag,
             button.dataset.value === "large"
               ? { a: 300, b: 400, c: 120, type: "half" }
-              : {stream error: stream disconnected before completion: stream closed before response.completed
+              : { a: 250, b: 350, c: 100, type: "full" }
+          );
+
+          order.bag.confirmPhysical = false;
+          selectedMethod = null;
+          renderAll();
+          break;
+
+        case "bag-svg": {
+          const svg = bagSVG(order.bag, true);
+
+          if (!svg) {
+            toast("Сначала заполните размеры пакета.");
+            return;
+          }
+
+          download(
+            "SlonPress_Пакет_развёртка.svg",
+            '<?xml version="1.0" encoding="UTF-8"?>\n' + svg,
+            "image/svg+xml;charset=utf-8"
+          );
+          break;
+        }
+
+        case "component-add":
+          if (!advancedComponents()) return;
+
+          if (order.product === "threeinone") {
+            toast("Календарь 3 в 1 содержит одну печатную основу.");
+            return;
+          }
+
+          if (order.components.length >= 100) {
+            toast("Максимум — 100 компонентов.");
+            return;
+          }
+
+          order.components.push(makeComponent(cfg));
+          selectedMethod = null;
+          renderAll();
+          break;
+
+        case "component-remove": {
+          if (!advancedComponents()) return;
+
+          const index = Number(button.dataset.index);
+
+          if (
+            !Number.isInteger(index) ||
+            index < 0 ||
+            index >= order.components.length
+          ) return;
+
+          const component = order.components[index];
+
+          if (
+            order.product === "threeinone" ||
+            (order.product === "paket" && component.role === "bag") ||
+            managedTentComponent(order, component)
+          ) {
+            toast("Этот компонент управляется комплектацией изделия.");
+            return;
+          }
+
+          if (order.components.length <= 1) {
+            toast("Оставьте хотя бы один компонент.");
+            return;
+          }
+
+          if (!confirm(
+            "Удалить компонент «" + component.name + "»?"
+          )) return;
+
+          order.components.splice(index, 1);
+          selectedMethod = null;
+          renderAll();
+          break;
+        }
+
+        case "method":
+          if (!pro) return;
+
+          selectedMethod = id;
+          recalculate();
+          break;
+
+        case "method-auto":
+          if (!pro) return;
+
+          selectedMethod = null;
+          recalculate();
+          break;
+
+        case "copy":
+          recalculate();
+
+          if (!chosen) {
+            toast("Нет корректного расчёта.");
+            return;
+          }
+
+          copyText(quote());
+          break;
+
+        case "print": {
+          recalculate();
+
+          if (!chosen) {
+            toast("Нет корректного расчёта.");
+            return;
+          }
+
+          const details = $("result-spec");
+          const wasOpen = details?.open ?? false;
+
+          if (details) details.open = true;
+
+          const restore = () => {
+            if (details?.isConnected) {
+              details.open = wasOpen;
+            }
+            window.removeEventListener("afterprint", restore);
+          };
+
+          window.addEventListener("afterprint", restore);
+
+          try {
+            window.print();
+          } catch (error) {
+            restore();
+            throw error;
+          }
+
+          break;
+        }
+
+        case "save":
+          saveResult();
+          break;
+
+        case "template-save":
+          saveTemplate();
+
+          if (dialogView === "templates") {
+            templatesDialog();
+          }
+          break;
+
+        case "saved-open":
+          savedDialog();
+          break;
+
+        case "templates-open":
+          templatesDialog();
+          break;
+
+        case "rates-open":
+          ratesDialog();
+          break;
+
+        case "dialog-close":
+          closeDialog();
+          break;
+
+        case "saved-load":
+          loadSaved(id);
+          break;
+
+        case "template-load":
+          loadTemplate(id);
+          break;
+
+        case "use-current":
+          if (!confirm(
+            "Применить текущие базовые цены?\n\n" +
+            "Ручные цены бумаги, штампов, клише, сборки, " +
+            "комплектующих и прочих расходов будут заменены.\n\n" +
+            "Сохранённый документ останется без изменений."
+          )) return;
+
+          // Сначала проверяем возможность пересчёта,
+          // только потом заменяем рабочий заказ.
+          {
+            const repriced = repriceOrder(order);
+            const nextConfig = clone(current);
+            const nextDerived = derive(repriced, nextConfig);
+            const errors = validateOrder(nextDerived, nextConfig);
+
+            if (errors.length) {
+              throw new Error(errors.join("\n"));
+            }
+
+            order = repriced;
+            cfg = nextConfig;
+            archived = false;
+            selectedMethod = null;
+          }
+
+          renderAll();
+          toast(
+            "Применены текущие тарифы. Проверьте нестандартные расходы."
+          );
+          break;
+
+        case "saved-item-copy": {
+          const item = saved.find(entry => entry.id === id);
+
+          if (item) {
+            // Копируется сохранённый документ,
+            // без пересчёта по новым формулам.
+            copyText(item.quote);
+          }
+          break;
+        }
+
+        case "saved-copy": {
+          const selected = saved.filter(
+            entry => selectedSaved.has(entry.id)
+          );
+
+          const items = selected.length ? selected : saved;
+
+          if (!items.length) {
+            toast("Нет сохранённых расчётов.");
+            return;
+          }
+
+          copyText(
+            items
+              .map(entry => entry.quote)
+              .join("\n\n──────────\n\n")
+          );
+          break;
+        }
+
+        case "saved-delete":
+          if (!saved.some(entry => entry.id === id)) return;
+          if (!confirm("Удалить сохранённый расчёт?")) return;
+
+          saved = saved.filter(entry => entry.id !== id);
+          selectedSaved.delete(id);
+
+          persist();
+          updateCounts();
+          savedDialog();
+          break;
+
+        case "saved-clear":
+          if (!saved.length) {
+            toast("Сохранённых расчётов нет.");
+            return;
+          }
+
+          if (!confirm(
+            "Удалить все сохранённые расчёты? " +
+            "Шаблоны останутся."
+          )) return;
+
+          saved = [];
+          selectedSaved.clear();
+
+          persist();
+          updateCounts();
+          savedDialog();
+          break;
+
+        case "template-delete":
+          if (!templates.some(entry => entry.id === id)) return;
+          if (!confirm("Удалить шаблон?")) return;
+
+          templates = templates.filter(entry => entry.id !== id);
+          persist();
+          templatesDialog();
+          break;
+
+        case "export":
+          download(
+            "SlonPress_" +
+              new Date().toISOString().slice(0, 10) +
+              ".json",
+            JSON.stringify(database(), null, 2),
+            "application/json;charset=utf-8"
+          );
+          break;
+
+        case "import":
+          $("importFile").click();
+          break;
+
+        default:
+          break;
+      }
+    } catch (error) {
+      console.error(error);
+      toast("Действие не выполнено: " + error.message);
+    }
+  });
+
+  // ============================================================
+  // ИМПОРТ ФАЙЛОВ И ЗАКРЫТИЕ ОКОН
+  // ============================================================
+
+  $("importFile").addEventListener("change", event => {
+    if (!ready) return;
+    importFile(event.target.files?.[0]);
+  });
+
+  $("managerDialog").addEventListener("close", () => {
+    dialogView = "";
+
+    // Пароль не оставляем в DOM после закрытия окна.
+    const password = $("professionalPassword");
+    if (password) password.value = "";
+  });
+
+  // ============================================================
+  // НАЗВАНИЕ И ПОЯСНЕНИЯ ИНТЕРФЕЙСА
+  // ============================================================
+
+  function applyBranding() {
+    document.title = "SlonPress.ru — калькулятор полиграфии";
+
+    const brandName = document.querySelector(".brand strong");
+    if (brandName) brandName.textContent = "SlonPress.ru";
+
+    const brandMark = document.querySelector(".brand-mark");
+    if (brandMark) brandMark.textContent = "S";
+
+    const footerName = document.querySelector(
+      ".page-footer > span:first-child"
+    );
+
+    if (footerName) {
+      footerName.textContent =
+        "SlonPress.ru · локальное хранение расчётов";
+    }
+
+    /*
+     * Обновляем пояснения старого index.html.
+     * Остальную структуру интерфейса не меняем.
+     */
+    const rulesBody = document.querySelector(
+      ".form-column > details.foldout:last-of-type > .foldout-body"
+    );
+
+    if (rulesBody) {
+      rulesBody.innerHTML = `
+        <p>
+          Расчёт предварительный. Материалы, оборудование,
+          раскладку и макет проверяет технолог.
+        </p>
+
+        <p>
+          Прямоугольная раскладка проверяет две ориентации.
+          Смешанное размещение, направление волокна,
+          производственный спуск полос и особенности захвата машины
+          автоматически не рассчитываются.
+        </p>
+
+        <p>
+          Брошюра задаётся в готовом размере страницы.
+          Расчёт выполняется по разворотам.
+          Полосы блока указываются без обложки, кратно четырём.
+          Расчётный спуск необходимо проверить перед производством.
+        </p>
+
+        <p>
+          Цифра SRA3 и B2:
+          бумага и оттиски считаются без отдельной платы
+          за приладку печати.
+          Технологический запас берётся из справочника.
+          Настройки резки, ламинации и других операций
+          могут оплачиваться отдельно.
+        </p>
+
+        <p>
+          Плоттер рассчитывается по секциям 320×450 мм
+          с учётом заданных полей.
+          Приладочный запас не отправляется на плоттер.
+          Для листовок минимальная стоимость плоттера
+          применяется один раз на весь заказ до общей наценки.
+          Обычная резка компонента при включённом плоттере
+          не начисляется.
+          Сложность контура автоматически не оценивается.
+        </p>
+
+        <p>
+          Домики:
+          А5 — перекидные листы 210×148 мм,
+          квадрат — 205×205 мм.
+          Основание задаётся отдельно в развёртке.
+          Размер и цена покупного блока Полимат
+          берутся из prices.js.
+          Покупной блок оплачивается один раз на календарь.
+          Верхняя обложка печатается отдельно.
+        </p>
+
+        <p>
+          Число изделий на штампе задаётся вручную.
+          Совместимость штампа с раскладкой нужно проверить.
+          Биговку, входящую в вырубку, не добавляйте повторно.
+        </p>
+
+        <p>
+          Прибыль указана до налогов и неучтённых расходов.
+          НДС отдельно не выделяется.
+          УФ использует продажные тарифы без общей наценки.
+        </p>
+
+        <p>
+          Сохранённые документы и шаблоны хранятся
+          в этом браузере. Для переноса используйте экспорт.
+          При открытии старого заказа создаётся рабочая копия
+          с архивными тарифами и текущими формулами.
+          Исходный сохранённый документ не изменяется.
+        </p>
+
+        <p>
+          Профессиональный режим закрывается паролем
+          только на уровне интерфейса.
+          Это не серверная авторизация:
+          исходный код и файл тарифов технически доступны посетителю.
+        </p>
+      `;
+    }
+  }
+
+  // ============================================================
+  // ЗАПУСК
+  // ============================================================
+
+  try {
+    applyBranding();
+
+    const configErrors = validateConfig(window.PRINT_PRICES);
+
+    if (configErrors.length) {
+      throw new Error(configErrors.join("\n"));
+    }
+
+    current = clone(window.PRINT_PRICES);
+    cfg = clone(current);
+
+    /*
+     * Проверяем исходные параметры доступных изделий.
+     * Архивное изделие diecut в каталог новых заказов не входит.
+     *
+     * Новые тарифы плоттера и покупного блока домика проверяются
+     * при включении соответствующих опций. Это позволяет открыть
+     * калькулятор со старым справочником, не подставляя скрытых цен.
+     */
+    for (const [id] of PRODUCTS) {
+      const sample = baseOrder(id, current);
+      const sampleDerived = derive(sample, current);
+      const errors = validateOrder(sampleDerived, current);
+
+      if (errors.length) {
+        throw new Error(
+          product(id)[1] + ": " + errors.join("\n")
+        );
+      }
+    }
+
+    order = baseOrder("flyer", cfg);
+
+    loadStorage();
+    renderAll();
+
+    ready = true;
+  } catch (error) {
+    ready = false;
+    console.error(error);
+
+    const content = document.querySelector(".content");
+
+    if (content) {
+      content.innerHTML = `
+        <section class="card">
+          <div class="card-body">
+            <h1>Не удалось запустить калькулятор</h1>
+
+            <p class="subtitle">
+              Проверьте файл prices.js, порядок подключения
+              скриптов и консоль браузера.
+            </p>
+
+            <div class="error section-gap">
+              ${String(error.message)
+                .split("\n")
+                .map(text => `<div>${esc(text)}</div>`)
+                .join("")}
+            </div>
+
+            <p class="small section-gap">
+              Сначала должен подключаться prices.js,
+              затем calculator.js.
+              Сохранённые данные браузера автоматически не удаляются.
+            </p>
+          </div>
+        </section>
+      `;
+    }
+
+    const mobileTotal = $("mobileTotal");
+    if (mobileTotal) mobileTotal.hidden = true;
+  }
+})();
