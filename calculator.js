@@ -173,11 +173,11 @@
   // ============================================================
 
   function toast(text) {
-    \$("toast").textContent = text;
-    \$("toast").hidden = false;
+    $("toast").textContent = text;
+    $("toast").hidden = false;
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => {
-      \$("toast").hidden = true;
+      $("toast").hidden = true;
     }, 5000);
   }
 
@@ -1631,15 +1631,15 @@
       : finite(value) ? value : "";
 
     return `
-      <label class="field \${options.full ? "full" : ""}">
-        <span>\${esc(label)}</span>
+      <label class="field ${options.full ? "full" : ""}">
+        <span>${esc(label)}</span>
         <input
-          data-path="\${esc(path)}"
-          type="\${options.text ? "text" : "number"}"
-          value="\${esc(displayed)}"
-          \${options.text ? "" :
+          data-path="${esc(path)}"
+          type="${options.text ? "text" : "number"}"
+          value="${esc(displayed)}"
+          ${options.text ? "" :
             `min="${options.min ?? 0}" step="${options.step ?? "any"}"`}
-          \${options.disabled ? "disabled" : ""}
+          ${options.disabled ? "disabled" : ""}
         >
       </label>
     `;
@@ -1647,18 +1647,18 @@
 
   function select(label, path, value, choices, options = {}) {
     return `
-      <label class="field \${options.full ? "full" : ""}">
-        <span>\${esc(label)}</span>
+      <label class="field ${options.full ? "full" : ""}">
+        <span>${esc(label)}</span>
         <select
-          data-path="\${esc(path)}"
-          \${options.numeric ? 'data-numeric="true"' : ""}
-          \${options.disabled ? "disabled" : ""}
+          data-path="${esc(path)}"
+          ${options.numeric ? 'data-numeric="true"' : ""}
+          ${options.disabled ? "disabled" : ""}
         >
-          \${choices.map(([id, title]) => `
+          ${choices.map(([id, title]) => `
             <option
-              value="\${esc(id)}"
-              \${String(value) === String(id) ? "selected" : ""}
-            >\${esc(title)}</option>
+              value="${esc(id)}"
+              ${String(value) === String(id) ? "selected" : ""}
+            >${esc(title)}</option>
           `).join("")}
         </select>
       </label>
@@ -1670,11 +1670,11 @@
       <label class="check">
         <input
           type="checkbox"
-          data-path="\${esc(path)}"
-          \${value ? "checked" : ""}
-          \${disabled ? "disabled" : ""}
+          data-path="${esc(path)}"
+          ${value ? "checked" : ""}
+          ${disabled ? "disabled" : ""}
         >
-        \${esc(label)}
+        ${esc(label)}
       </label>
     `;
   }
@@ -1682,14 +1682,14 @@
   function quickFormat(scope, selected, choices) {
     return `
       <div class="quick">
-        \${choices.map(([id, title]) => `
+        ${choices.map(([id, title]) => `
           <button
             type="button"
             data-action="format"
-            data-scope="\${esc(scope)}"
-            data-value="\${esc(id)}"
-            class="\${selected === id ? "active" : ""}"
-          >\${esc(title)}</button>
+            data-scope="${esc(scope)}"
+            data-value="${esc(id)}"
+            class="${selected === id ? "active" : ""}"
+          >${esc(title)}</button>
         `).join("")}
       </div>
     `;
@@ -1702,37 +1702,37 @@
   function renderNav() {
     const groups = [...new Set(PRODUCTS.map(p => p[2]))];
 
-    \$("productNav").innerHTML = groups.map(group => `
+    $("productNav").innerHTML = groups.map(group => `
       <div class="nav-group">
-        <div class="nav-title">\${esc(group)}</div>
+        <div class="nav-title">${esc(group)}</div>
 
-        \${PRODUCTS.filter(p => p[2] === group).map(p => `
+        ${PRODUCTS.filter(p => p[2] === group).map(p => `
           <button
-            class="nav-item \${order.product === p[0] ? "active" : ""}"
+            class="nav-item ${order.product === p[0] ? "active" : ""}"
             data-action="product"
-            data-id="\${p[0]}"
-            \${order.product === p[0] ? 'aria-current="page"' : ""}
+            data-id="${p[0]}"
+            ${order.product === p[0] ? 'aria-current="page"' : ""}
           >
-            <span class="nav-symbol" aria-hidden="true">\${p[3]}</span>
-            \${esc(p[1])}
+            <span class="nav-symbol" aria-hidden="true">${p[3]}</span>
+            ${esc(p[1])}
           </button>
         `).join("")}
       </div>
     `).join("");
 
-    \$("mobileProduct").innerHTML = groups.map(group => `
-      <optgroup label="\${esc(group)}">
-        \${PRODUCTS.filter(p => p[2] === group).map(p => `
+    $("mobileProduct").innerHTML = groups.map(group => `
+      <optgroup label="${esc(group)}">
+        ${PRODUCTS.filter(p => p[2] === group).map(p => `
           <option
-            value="\${p[0]}"
-            \${order.product === p[0] ? "selected" : ""}
-          >\${esc(p[1])}</option>
+            value="${p[0]}"
+            ${order.product === p[0] ? "selected" : ""}
+          >${esc(p[1])}</option>
         `).join("")}
       </optgroup>
     `).join("");
 
     if (order.product === "diecut") {
-      \$("mobileProduct").insertAdjacentHTML("afterbegin", `
+      $("mobileProduct").insertAdjacentHTML("afterbegin", `
         <option value="diecut" selected disabled>
           Архивное изделие с вырубкой
         </option>
@@ -1749,11 +1749,11 @@
 
     let html = `
       <div class="fields">
-        \${input("Название заказа", "name", o.name, {
+        ${input("Название заказа", "name", o.name, {
           text: true, full: true
         })}
 
-        \${input(
+        ${input(
           o.product === "uvprint"
             ? "Количество изделий / листов"
             : "Тираж готовых изделий",
@@ -1764,15 +1764,15 @@
       </div>
 
       <div class="quick">
-        \${(o.product === "uvprint"
+        ${(o.product === "uvprint"
           ? [1, 10, 50, 100, 500]
           : cfg.quantities
         ).map(q => `
           <button
             data-action="quantity"
-            data-value="\${q}"
-            class="\${o.quantity === q ? "active" : ""}"
-          >\${num(q)}</button>
+            data-value="${q}"
+            class="${o.quantity === q ? "active" : ""}"
+          >${num(q)}</button>
         `).join("")}
       </div>
     `;
@@ -1781,17 +1781,17 @@
       html += `
         <h3>Единый готовый формат</h3>
 
-        \${quickFormat("book", o.bookFormat, [
+        ${quickFormat("book", o.bookFormat, [
           ["A6", "А6"],
           ["A5", "А5"],
           ["A4", "А4"],
           ["CUSTOM", "Свой размер"]
         ])}
 
-        \${o.bookFormat === "CUSTOM" ? `
+        ${o.bookFormat === "CUSTOM" ? `
           <div class="fields">
-            \${input("Ширина, мм", "customBook.w", o.customBook.w, { min: 1 })}
-            \${input("Высота, мм", "customBook.h", o.customBook.h, { min: 1 })}
+            ${input("Ширина, мм", "customBook.w", o.customBook.w, { min: 1 })}
+            ${input("Высота, мм", "customBook.h", o.customBook.h, { min: 1 })}
           </div>
         ` : ""}
       `;
@@ -1807,8 +1807,8 @@
       if (o.wall.format === "custom") {
         html += `
           <div class="fields">
-            \${input("Ширина, мм", "wall.w", o.wall.w, { min: 1 })}
-            \${input("Высота, мм", "wall.h", o.wall.h, { min: 1 })}
+            ${input("Ширина, мм", "wall.w", o.wall.w, { min: 1 })}
+            ${input("Высота, мм", "wall.h", o.wall.h, { min: 1 })}
           </div>
         `;
       }
@@ -1831,11 +1831,11 @@
         </div>
 
         <div class="fields">
-          \${input("Ширина A, мм", "bag.a", b.a, { min: 1 })}
-          \${input("Высота B, мм", "bag.b", b.b, { min: 1 })}
-          \${input("Глубина C, мм", "bag.c", b.c, { min: 2 })}
+          ${input("Ширина A, мм", "bag.a", b.a, { min: 1 })}
+          ${input("Высота B, мм", "bag.b", b.b, { min: 1 })}
+          ${input("Глубина C, мм", "bag.c", b.c, { min: 2 })}
 
-          \${select(
+          ${select(
             "Конструкция",
             "bag.type",
             rule?.type || b.type,
@@ -1843,7 +1843,7 @@
             { disabled: !!rule }
           )}
 
-          \${pro ? input(
+          ${pro ? input(
             "Техзапас на заказ, листов",
             "bag.extraSheets",
             b.extraSheets,
@@ -1851,15 +1851,15 @@
           ) : ""}
         </div>
 
-        \${pro ? `
+        ${pro ? `
           <div class="checks">
-            \${check(
+            ${check(
               "Размещение на физическом листе подтверждено технологом",
               "bag.confirmPhysical",
               b.confirmPhysical
             )}
-            \${check("Включить новый штамп", "bag.includeStamp", b.includeStamp)}
-            \${check(
+            ${check("Включить новый штамп", "bag.includeStamp", b.includeStamp)}
+            ${check(
               "Внешний контур в оценке штампа",
               "bag.outerContour",
               b.outerContour
@@ -1884,14 +1884,14 @@
 
       html += `
         <div class="fields">
-          \${q.size === "custom" ? `
-            \${select("Класс блоков", "calendar.tier", q.tier, Object.entries(TIERS))}
-            \${input("Ширина, мм", "calendar.customW", q.customW, { min: 1 })}
-            \${input("Высота шапки, мм", "calendar.customHeadH", q.customHeadH, { min: 1 })}
-            \${input("Высота подложки, мм", "calendar.customBackingH", q.customBackingH, { min: 1 })}
+          ${q.size === "custom" ? `
+            ${select("Класс блоков", "calendar.tier", q.tier, Object.entries(TIERS))}
+            ${input("Ширина, мм", "calendar.customW", q.customW, { min: 1 })}
+            ${input("Высота шапки, мм", "calendar.customHeadH", q.customHeadH, { min: 1 })}
+            ${input("Высота подложки, мм", "calendar.customBackingH", q.customBackingH, { min: 1 })}
           ` : ""}
 
-          \${select(
+          ${select(
             "Покупной комплект блоков",
             "calendar.blockChoice",
             q.blockChoice,
@@ -1904,7 +1904,7 @@
         </div>
 
         <div class="checks">
-          \${check("Магнитный курсор", "calendar.magnet", q.magnet)}
+          ${check("Магнитный курсор", "calendar.magnet", q.magnet)}
         </div>
       `;
     }
@@ -1912,7 +1912,7 @@
     if (o.product === "threeinone") {
       html += `
         <div class="fields">
-          \${select(
+          ${select(
             "Размер календаря",
             "three.size",
             o.three.size,
@@ -1944,7 +1944,7 @@
         <h3>Комплектация домика</h3>
 
         <div class="fields section-gap">
-          \${select(
+          ${select(
             "Блок календаря",
             "tent.blockMode",
             o.tent.blockMode,
@@ -1956,7 +1956,7 @@
             { full: true }
           )}
 
-          \${!purchased ? select(
+          ${!purchased ? select(
             "Формат перекидных листов",
             "tent.format",
             o.tent.format,
@@ -1970,16 +1970,16 @@
         </div>
 
         <div class="checks">
-          \${check("Кашированное основание", "tent.mounted", o.tent.mounted)}
+          ${check("Кашированное основание", "tent.mounted", o.tent.mounted)}
         </div>
 
-        \${purchased ? `
+        ${purchased ? `
           <div class="notice section-gap">
-            \${blockConfigured
+            ${blockConfigured
               ? `
                 Один покупной блок:
-                <strong>\${num(e.tentPolimatW)}×${num(e.tentPolimatH)} мм</strong>,
-                <strong>\${money(e.tentPolimatBlock)} за календарь</strong>.
+                <strong>${num(e.tentPolimatW)}×${num(e.tentPolimatH)} мм</strong>,
+                <strong>${money(e.tentPolimatBlock)} за календарь</strong>.
               `
               : `
                 В тарифах не задан покупной блок домика.
@@ -1989,7 +1989,7 @@
 
           <p class="small">
             Печать покупного блока повторно не начисляется.
-            \${o.tent.blockMode === "polimatCover"
+            ${o.tent.blockMode === "polimatCover"
               ? "Верхняя обложка печатается отдельно в размере блока."
               : "Печатная верхняя обложка не включена."}
           </p>
@@ -2008,14 +2008,14 @@
 
       html += `
         <div class="fields">
-          \${select("Вид УФ-печати", "uv.type", u.type, UV_TYPES, { full: true })}
+          ${select("Вид УФ-печати", "uv.type", u.type, UV_TYPES, { full: true })}
 
-          \${!["pens", "timedSheet"].includes(u.type) ? `
-            \${input("Ширина отпечатка / изделия, мм", "uv.w", u.w, { min: 1 })}
-            \${input("Высота отпечатка / изделия, мм", "uv.h", u.h, { min: 1 })}
+          ${!["pens", "timedSheet"].includes(u.type) ? `
+            ${input("Ширина отпечатка / изделия, мм", "uv.w", u.w, { min: 1 })}
+            ${input("Высота отпечатка / изделия, мм", "uv.h", u.h, { min: 1 })}
           ` : ""}
 
-          \${u.type === "custom" ? select(
+          ${u.type === "custom" ? select(
             "Загрузка",
             "uv.loading",
             u.loading,
@@ -2023,7 +2023,7 @@
             { full: true }
           ) : ""}
 
-          \${u.type === "designer300" ? select(
+          ${u.type === "designer300" ? select(
             "Цветность",
             "uv.designerColor",
             u.designerColor,
@@ -2033,16 +2033,16 @@
         </div>
 
         <div class="checks">
-          \${!["pens", "pvc3"].includes(u.type)
+          ${!["pens", "pvc3"].includes(u.type)
             ? check("С белилами", "uv.white", u.white)
             : ""}
 
-          \${u.type === "designer300"
+          ${u.type === "designer300"
             ? check("Софт-тач", "uv.softTouch", u.softTouch)
             : ""}
         </div>
 
-        \${u.type === "timedSheet" ? `
+        ${u.type === "timedSheet" ? `
           <p class="small section-gap">
             Фиксированный лист 500×700 мм, одна сторона.
             В тираже укажите количество листов.
@@ -2051,8 +2051,8 @@
       `;
     }
 
-    \$("orderForm").innerHTML = html;
-    \$("orderNote").value = o.note;
+    $("orderForm").innerHTML = html;
+    $("orderNote").value = o.note;
   }
 
   // ============================================================
@@ -2079,8 +2079,8 @@
   function renderComponents() {
     const advanced = advancedComponents();
 
-    \$("componentsCard").hidden = order.product === "uvprint";
-    \$("addComponent").hidden =
+    $("componentsCard").hidden = order.product === "uvprint";
+    $("addComponent").hidden =
       !advanced || order.product === "threeinone";
 
     if (order.product === "uvprint") return;
@@ -2125,41 +2125,41 @@
       return `
         <article class="component">
           <div class="component-top">
-            \${advanced ? `
+            ${advanced ? `
               <label>
                 <input
                   type="checkbox"
-                  data-path="\${path("enabled")}"
-                  \${p.enabled ? "checked" : ""}
-                  \${core || managed ? "disabled" : ""}
+                  data-path="${path("enabled")}"
+                  ${p.enabled ? "checked" : ""}
+                  ${core || managed ? "disabled" : ""}
                 >
-                <h3>\${esc(p.name)}</h3>
+                <h3>${esc(p.name)}</h3>
               </label>
             ` : `
-              <h3>\${esc(p.name)}${p.enabled ? "" : " · отключён"}</h3>
+              <h3>${esc(p.name)}${p.enabled ? "" : " · отключён"}</h3>
             `}
 
-            \${advanced && !core && !managed ? `
+            ${advanced && !core && !managed ? `
               <button
                 class="text-button danger"
                 data-action="component-remove"
-                data-index="\${i}"
+                data-index="${i}"
               >Удалить</button>
             ` : ""}
           </div>
 
-          \${p.enabled ? `
+          ${p.enabled ? `
             <div class="fields">
-              \${!locked ? `
-                \${input("Ширина по макету, мм", path("w"), p.w, { min: 1 })}
-                \${input("Высота по макету, мм", path("h"), p.h, { min: 1 })}
+              ${!locked ? `
+                ${input("Ширина по макету, мм", path("w"), p.w, { min: 1 })}
+                ${input("Высота по макету, мм", path("h"), p.h, { min: 1 })}
               ` : `
                 <p class="small full">
-                  Размер: \${num(p.w)}×${num(p.h)} мм
+                  Размер: ${num(p.w)}×${num(p.h)} мм
                 </p>
               `}
 
-              \${p.mode === "pages"
+              ${p.mode === "pages"
                 ? input("Полос без обложки", path("pages"), p.pages, {
                   min: 4, step: 4
                 })
@@ -2171,18 +2171,18 @@
                   })
                   : ""}
 
-              \${isSticker(d)
+              ${isSticker(d)
                 ? select("Материал", path("material"), p.material, [
                   ["paper", "Бумажная самоклейка"],
                   ["film", "Самоклеящаяся плёнка"]
                 ])
                 : select("Бумага", path("paper"), p.paper, paperChoices)}
 
-              \${!isSticker(d)
+              ${!isSticker(d)
                 ? input("Плотность, г/м²", path("density"), p.density, { min: 1 })
                 : ""}
 
-              \${!isSticker(d)
+              ${!isSticker(d)
                 ? select(
                   "Цветность",
                   path("color"),
@@ -2193,13 +2193,13 @@
                 )
                 : ""}
 
-              \${select("Ламинация", path("lamination"), p.lamination, [
+              ${select("Ламинация", path("lamination"), p.lamination, [
                 ["none", "Без ламинации"],
                 ["gloss", "Глянцевая / матовая"],
                 ["soft", "Софт-тач"]
               ])}
 
-              \${p.lamination !== "none"
+              ${p.lamination !== "none"
                 ? select(
                   "Сторон ламинации",
                   path("lamSides"),
@@ -2211,12 +2211,12 @@
             </div>
 
             <div class="checks">
-              \${check("Биговка", path("score"), p.score)}
-              \${check("Фальцовка", path("folding"), p.folding)}
-              \${check("УФ-лак", path("uv"), p.uv)}
-              \${check("Тиснение", path("emboss"), p.emboss)}
+              ${check("Биговка", path("score"), p.score)}
+              ${check("Фальцовка", path("folding"), p.folding)}
+              ${check("УФ-лак", path("uv"), p.uv)}
+              ${check("Тиснение", path("emboss"), p.emboss)}
 
-              \${advanced
+              ${advanced
                 ? check(
                   "Резка",
                   path("cutting"),
@@ -2225,7 +2225,7 @@
                 )
                 : ""}
 
-              \${advanced
+              ${advanced
                 ? check(
                   "Вырубка",
                   path("diecut"),
@@ -2236,20 +2236,20 @@
                 )
                 : ""}
 
-              \${d.product === "flyer"
+              ${d.product === "flyer"
                 ? check("Плоттерная резка", path("plotter"), original.plotter)
                 : ""}
             </div>
 
-            \${flyerPlotter ? `
+            ${flyerPlotter ? `
               <p class="small section-gap">
-                \${nonnegative(cfg.extra.flyerPlotterSheet)
+                ${nonnegative(cfg.extra.flyerPlotterSheet)
                   ? money(cfg.extra.flyerPlotterSheet)
                   : "Тариф не задан"}
                 за секцию 320×450 мм.
 
                 Минимум:
-                \${nonnegative(cfg.extra.flyerPlotterMinimum)
+                ${nonnegative(cfg.extra.flyerPlotterMinimum)
                   ? money(cfg.extra.flyerPlotterMinimum)
                   : "не задан"}
                 на весь заказ до общей наценки.
@@ -2259,24 +2259,24 @@
               </p>
             ` : ""}
 
-            \${p.score ? `
+            ${p.score ? `
               <div class="fields section-gap">
-                \${input("Бигов на элемент", path("scoreCount"), p.scoreCount, {
+                ${input("Бигов на элемент", path("scoreCount"), p.scoreCount, {
                   min: 1, step: 1
                 })}
               </div>
             ` : ""}
 
-            \${advanced ? `
-              <details id="component-tech-\${i}">
+            ${advanced ? `
+              <details id="component-tech-${i}">
                 <summary>Технология и параметры компонента</summary>
 
                 <div class="fields">
-                  \${input("Название", path("name"), original.name, {
+                  ${input("Название", path("name"), original.name, {
                     text: true, full: true, disabled: core
                   })}
 
-                  \${select("Назначение", path("role"), p.role, [
+                  ${select("Назначение", path("role"), p.role, [
                     ["other", "Другой компонент"],
                     ["cover", "Обложка"],
                     ["block", "Блок / листы"],
@@ -2286,42 +2286,42 @@
                     ...(p.role === "bag" ? [["bag", "Развёртка пакета"]] : [])
                   ], { disabled: core || managed })}
 
-                  \${select("Способ количества", path("mode"), p.mode, [
+                  ${select("Способ количества", path("mode"), p.mode, [
                     ["units", "Элементы"],
                     ["pages", "Полосы"]
                   ], { disabled: core || managed })}
 
-                  \${!isSticker(d) ? `
-                    \${select("Цена бумаги", path("priceMode"), p.priceMode, [
+                  ${!isSticker(d) ? `
+                    ${select("Цена бумаги", path("priceMode"), p.priceMode, [
                       ["kg", "За килограмм"],
                       ["sheet", "За печатный лист"]
                     ])}
 
-                    \${p.priceMode === "kg"
+                    ${p.priceMode === "kg"
                       ? input("Бумага, ₽/кг", path("priceKg"), p.priceKg)
                       : input("Бумага, ₽/лист", path("priceSheet"), p.priceSheet)}
                   ` : ""}
 
-                  \${input("Вылет с каждой стороны, мм", path("bleed"), p.bleed)}
+                  ${input("Вылет с каждой стороны, мм", path("bleed"), p.bleed)}
 
-                  \${input("Комплектов форм / макетов", path("setups"), p.setups, {
+                  ${input("Комплектов форм / макетов", path("setups"), p.setups, {
                     min: 1,
                     step: 1,
                     disabled: d.product === "broshyura"
                   })}
 
-                  \${p.diecut ? `
-                    \${input("Изделий на штампе", path("perStamp"), p.perStamp, {
+                  ${p.diecut ? `
+                    ${input("Изделий на штампе", path("perStamp"), p.perStamp, {
                       min: 1, step: 1
                     })}
 
-                    \${input("Стоимость штампа, ₽", path("stamp"), p.stamp, {
+                    ${input("Стоимость штампа, ₽", path("stamp"), p.stamp, {
                       disabled: d.product === "paket" &&
                         order.bag.includeStamp && p.role === "bag"
                     })}
                   ` : ""}
 
-                  \${p.emboss
+                  ${p.emboss
                     ? input("Стоимость клише, ₽", path("plate"), p.plate)
                     : ""}
                 </div>
@@ -2338,13 +2338,13 @@
       `;
     }).join("");
 
-    \$("components").innerHTML = html;
+    $("components").innerHTML = html;
   }
 
   function renderAssembly() {
     const accessible = pro || order.product === "flyer";
 
-    \$("assemblyCard").hidden =
+    $("assemblyCard").hidden =
       !accessible || order.product === "uvprint";
 
     if (!accessible || order.product === "uvprint") return;
@@ -2362,24 +2362,24 @@
       "threeinone", "tent", "wall"
     ].includes(order.product);
 
-    \$("assembly").innerHTML = `
+    $("assembly").innerHTML = `
       <div class="fields">
-        \${input("Сборка, ₽/изделие", "assembly", d.assembly, {
+        ${input("Сборка, ₽/изделие", "assembly", d.assembly, {
           disabled: automatic
         })}
 
-        \${input("Настройка сборки, ₽/заказ", "assemblySetup", order.assemblySetup)}
+        ${input("Настройка сборки, ₽/заказ", "assemblySetup", order.assemblySetup)}
 
-        \${input(
+        ${input(
           "Базовые комплектующие, ₽/изделие",
           "accessories",
           order.product === "quarter" ? d.accessories : order.accessories,
           { disabled: order.product === "quarter" }
         )}
 
-        \${input("Прочие расходы, ₽/заказ", "extra", order.extra)}
+        ${input("Прочие расходы, ₽/заказ", "extra", order.extra)}
 
-        \${input(
+        ${input(
           "Примечание к комплектующим",
           "accessoriesNote",
           order.accessoriesNote,
@@ -2411,20 +2411,20 @@
     return `
       <svg
         xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 \${g.width} ${g.height}"
-        \${physical
+        viewBox="0 0 ${g.width} ${g.height}"
+        ${physical
           ? `width="${g.width}mm" height="${g.height}mm"`
           : 'role="img" aria-label="Предварительная развёртка пакета"'}
       >
         <rect
           x="0" y="0"
-          width="\${g.width}" height="${g.height}"
+          width="${g.width}" height="${g.height}"
           fill="none" stroke="#b3bacb" stroke-width=".7"
         />
-        \${lines.map(line => `
+        ${lines.map(line => `
           <line
-            x1="\${line.x1}" y1="${line.y1}"
-            x2="\${line.x2}" y2="${line.y2}"
+            x1="${line.x1}" y1="${line.y1}"
+            x2="${line.x2}" y2="${line.y2}"
             stroke="#635bff" stroke-width="1" fill="none"
           />
         `).join("")}
@@ -2433,7 +2433,7 @@
   }
 
   function renderBag() {
-    const root = \$("bagPreview");
+    const root = $("bagPreview");
     if (!root) return;
 
     const svg = bagSVG(order.bag);
@@ -2449,24 +2449,24 @@
     root.innerHTML = `
       <div class="actions">
         <strong>
-          \${num(g.width)}×${num(g.height)} мм · ${g.parts} ч.
+          ${num(g.width)}×${num(g.height)} мм · ${g.parts} ч.
         </strong>
         <button class="button compact" data-action="bag-svg">
           Скачать SVG
         </button>
       </div>
 
-      \${svg}
+      ${svg}
 
       <p class="small">
         Предварительная схема, не производственный чертёж штампа.
       </p>
 
-      \${pro ? `
+      ${pro ? `
         <p class="small">
-          Линии: \${num(estimate.meters)} пог. м.
-          Оценка штампа: \${money(estimate.cost)}.
-          \${order.bag.includeStamp
+          Линии: ${num(estimate.meters)} пог. м.
+          Оценка штампа: ${money(estimate.cost)}.
+          ${order.bag.includeStamp
             ? "Включён."
             : "Не включён автоматически."}
         </p>
@@ -2591,56 +2591,56 @@
       )
     ].map(node => node.id));
 
-    \$("results").innerHTML = `
+    $("results").innerHTML = `
       <div class="result-main">
         <div class="result-top">
           <h2>Ваш расчёт</h2>
           <span class="badge">
-            \${archived ? "Архивные тарифы" : "Предварительно"}
+            ${archived ? "Архивные тарифы" : "Предварительно"}
           </span>
         </div>
 
         <div class="price-label">Стоимость заказа</div>
-        <div class="price">\${money(result.price)}</div>
+        <div class="price">${money(result.price)}</div>
 
         <div class="unit-price">
-          \${money(result.unitPrice)} за единицу ·
-          \${num(order.quantity)} шт.
+          ${money(result.unitPrice)} за единицу ·
+          ${num(order.quantity)} шт.
         </div>
 
         <div class="divider"></div>
-        <h3>\${esc(order.name)}</h3>
+        <h3>${esc(order.name)}</h3>
 
         <dl class="spec-list">
           <div class="spec-row">
             <dt>Изделие</dt>
-            <dd>\${esc(product(order.product)[1])}</dd>
+            <dd>${esc(product(order.product)[1])}</dd>
           </div>
           <div class="spec-row">
             <dt>Тираж</dt>
-            <dd>\${num(order.quantity)} шт.</dd>
+            <dd>${num(order.quantity)} шт.</dd>
           </div>
           <div class="spec-row">
             <dt>Тарифы</dt>
-            <dd>\${esc(cfg.meta.version)}</dd>
+            <dd>${esc(cfg.meta.version)}</dd>
           </div>
         </dl>
 
         <details class="section-gap" id="result-spec">
           <summary class="small">Полный состав заказа</summary>
           <div class="result-description section-gap">
-            \${esc(describe(derived, result))}
+            ${esc(describe(derived, result))}
           </div>
         </details>
 
-        \${order.note ? `
-          <p class="result-description section-gap">\${esc(order.note)}</p>
+        ${order.note ? `
+          <p class="result-description section-gap">${esc(order.note)}</p>
         ` : ""}
 
         <div class="technology">
-          <strong>\${esc(result.label)}</strong>
+          <strong>${esc(result.label)}</strong>
           <small>
-            \${result.uv
+            ${result.uv
               ? "Продажный тариф без общей наценки"
               : result.id === best.id
                 ? "Минимальная учтённая себестоимость"
@@ -2648,20 +2648,20 @@
           </small>
         </div>
 
-        \${result.warnings.map(warning => `
-          <div class="notice warning section-gap">\${esc(warning)}</div>
+        ${result.warnings.map(warning => `
+          <div class="notice warning section-gap">${esc(warning)}</div>
         `).join("")}
 
-        \${result.uv ? `
+        ${result.uv ? `
           <div class="table-scroll section-gap">
             <table>
               <tbody>
-                \${result.rows.map(([label, value]) => `
-                  <tr><td>\${esc(label)}</td><td>${esc(value)}</td></tr>
+                ${result.rows.map(([label, value]) => `
+                  <tr><td>${esc(label)}</td><td>${esc(value)}</td></tr>
                 `).join("")}
               </tbody>
             </table>
-            <p class="small section-gap">\${esc(result.info)}</p>
+            <p class="small section-gap">${esc(result.info)}</p>
           </div>
         ` : ""}
 
@@ -2679,31 +2679,31 @@
       <div class="result-footnote">
         SlonPress.ru. Итог подтверждается после проверки макета
         и производственных ограничений.
-        \${cfg.meta.demo ? "Используются демонстрационные тарифы." : ""}
+        ${cfg.meta.demo ? "Используются демонстрационные тарифы." : ""}
       </div>
     `;
 
     if (!pro) {
-      \$("professionalResults").innerHTML = "";
+      $("professionalResults").innerHTML = "";
     } else if (result.uv) {
-      \$("professionalResults").innerHTML = `
+      $("professionalResults").innerHTML = `
         <div class="notice">
           УФ использует продажные тарифы.
           Отдельная себестоимость и прибыль не определяются.
         </div>
       `;
     } else {
-      \$("professionalResults").innerHTML = `
+      $("professionalResults").innerHTML = `
         <details class="foldout" id="economics" open>
           <summary>Экономика заказа</summary>
           <div class="foldout-body">
             <div class="cost-row">
               <span>Себестоимость</span>
-              <strong>\${money(result.cost)}</strong>
+              <strong>${money(result.cost)}</strong>
             </div>
             <div class="cost-row profit">
               <span>Прибыль</span>
-              <strong>\${money(result.profit)}</strong>
+              <strong>${money(result.profit)}</strong>
             </div>
             <p class="small">До налогов и неучтённых накладных расходов.</p>
           </div>
@@ -2723,28 +2723,28 @@
                   <tr><th>Вариант</th><th>Цена</th><th></th></tr>
                 </thead>
                 <tbody>
-                  \${methods.map(m => m.valid ? `
+                  ${methods.map(m => m.valid ? `
                     <tr class="
-                      \${m.id === best.id ? "best" : ""}
-                      \${m.id === result.id ? "selected" : ""}
+                      ${m.id === best.id ? "best" : ""}
+                      ${m.id === result.id ? "selected" : ""}
                     ">
                       <td>
-                        \${m.id === best.id ? "★ " : ""}${esc(m.label)}
-                        <div class="small">Затраты: \${money(m.cost)}</div>
+                        ${m.id === best.id ? "★ " : ""}${esc(m.label)}
+                        <div class="small">Затраты: ${money(m.cost)}</div>
                       </td>
-                      <td>\${money(m.price)}</td>
+                      <td>${money(m.price)}</td>
                       <td>
                         <button
                           class="text-button"
                           data-action="method"
-                          data-id="\${esc(m.id)}"
+                          data-id="${esc(m.id)}"
                         >Выбрать</button>
                       </td>
                     </tr>
                   ` : `
                     <tr>
-                      <td>\${esc(m.label)}</td>
-                      <td colspan="2" class="small">\${esc(m.reason)}</td>
+                      <td>${esc(m.label)}</td>
+                      <td colspan="2" class="small">${esc(m.reason)}</td>
                     </tr>
                   `).join("")}
                 </tbody>
@@ -2757,29 +2757,29 @@
           <summary>Бумага, печать и операции</summary>
 
           <div class="foldout-body">
-            \${result.parts.map(p => `
+            ${result.parts.map(p => `
               <div class="detail-block">
-                <h3>\${esc(p.name)}</h3>
+                <h3>${esc(p.name)}</h3>
 
                 <p class="small">
-                  \${esc(p.method)}.
-                  Вместимость: \${num(p.capacity)}.
-                  Листов: \${num(p.baseSheets)} + ${num(p.spoil)} запас.
-                  Форм: \${num(p.formCount)}.
-                  \${p.setupCount
+                  ${esc(p.method)}.
+                  Вместимость: ${num(p.capacity)}.
+                  Листов: ${num(p.baseSheets)} + ${num(p.spoil)} запас.
+                  Форм: ${num(p.formCount)}.
+                  ${p.setupCount
                     ? `Приладки: ${num(p.setupCount)} по ${money(p.setupRate)}.`
                     : "Приладка печати не начисляется."}
-                  \${p.plotterSheets
+                  ${p.plotterSheets
                     ? "Секций плоттера: " + num(p.plotterSheets) + "."
                     : ""}
                 </p>
 
-                \${Object.entries(p.rows)
+                ${Object.entries(p.rows)
                   .filter(([, value]) => value !== 0)
                   .map(([key, value]) => `
                     <div class="cost-row">
-                      <span>\${esc(ROW_LABELS[key] || key)}</span>
-                      <strong>\${money(value)}</strong>
+                      <span>${esc(ROW_LABELS[key] || key)}</span>
+                      <strong>${money(value)}</strong>
                     </div>
                   `).join("")}
               </div>
@@ -2787,13 +2787,13 @@
 
             <div class="detail-block">
               <div class="cost-row">
-                <span>Сборка</span><strong>\${money(result.assembly)}</strong>
+                <span>Сборка</span><strong>${money(result.assembly)}</strong>
               </div>
               <div class="cost-row">
-                <span>Комплектующие</span><strong>\${money(result.accessories)}</strong>
+                <span>Комплектующие</span><strong>${money(result.accessories)}</strong>
               </div>
               <div class="cost-row">
-                <span>Прочее</span><strong>\${money(result.extra)}</strong>
+                <span>Прочее</span><strong>${money(result.extra)}</strong>
               </div>
             </div>
           </div>
@@ -2802,12 +2802,12 @@
     }
 
     for (const id of opened) {
-      const node = \$(id);
+      const node = $(id);
       if (node instanceof HTMLDetailsElement) node.open = true;
     }
 
-    \$("mobilePrice").textContent = money(result.price);
-    \$("mobileUnit").textContent = money(result.unitPrice) + " за единицу";
+    $("mobilePrice").textContent = money(result.price);
+    $("mobileUnit").textContent = money(result.unitPrice) + " за единицу";
   }
 
   function recalculate() {
@@ -2849,18 +2849,18 @@
     } catch (error) {
       console.warn(error);
 
-      \$("results").innerHTML = `
+      $("results").innerHTML = `
         <div class="error">
           <h3>Уточните параметры</h3>
-          \${String(error.message).split("\n").map(text => `
-            <div>\${esc(text)}</div>
+          ${String(error.message).split("\n").map(text => `
+            <div>${esc(text)}</div>
           `).join("")}
         </div>
       `;
 
-      \$("professionalResults").innerHTML = "";
-      \$("mobilePrice").textContent = "—";
-      \$("mobileUnit").textContent = "Расчёт недоступен";
+      $("professionalResults").innerHTML = "";
+      $("mobilePrice").textContent = "—";
+      $("mobileUnit").textContent = "Расчёт недоступен";
     }
 
     renderBag();
@@ -2875,25 +2875,25 @@
 
     const p = product(order.product);
 
-    \$("productTitle").textContent = p[1];
-    \$("productGroup").textContent = p[2];
-    \$("productHint").textContent = p[4];
+    $("productTitle").textContent = p[1];
+    $("productGroup").textContent = p[2];
+    $("productHint").textContent = p[4];
 
-    \$("proButton").classList.toggle("active", pro);
-    \$("proButton").setAttribute("aria-pressed", String(pro));
-    \$("proButton").textContent = pro
+    $("proButton").classList.toggle("active", pro);
+    $("proButton").setAttribute("aria-pressed", String(pro));
+    $("proButton").textContent = pro
       ? "Закрыть проф. режим"
       : "Проф. режим";
 
-    \$("sidebarVersion").textContent = "Тарифы " + current.meta.version;
-    \$("footerVersion").textContent = "Тарифы расчёта: " + cfg.meta.version;
+    $("sidebarVersion").textContent = "Тарифы " + current.meta.version;
+    $("footerVersion").textContent = "Тарифы расчёта: " + cfg.meta.version;
 
-    \$("demoBanner").hidden = !cfg.meta.demo;
-    \$("archiveBanner").hidden = !archived;
+    $("demoBanner").hidden = !cfg.meta.demo;
+    $("archiveBanner").hidden = !archived;
 
     if (archived) {
-      \$("archiveBanner").innerHTML = `
-        Открыты архивные тарифы \${esc(cfg.meta.version)}.
+      $("archiveBanner").innerHTML = `
+        Открыты архивные тарифы ${esc(cfg.meta.version)}.
         Сохранённый документ остаётся неизменным.
         Рабочий пересчёт использует текущую версию формул:
         приладки цифровой печати исключены.
@@ -2914,7 +2914,7 @@
     recalculate();
 
     for (const id of opened) {
-      const node = \$(id);
+      const node = $(id);
       if (node instanceof HTMLDetailsElement) node.open = true;
     }
   }
@@ -3037,8 +3037,8 @@
   }
 
   function updateCounts() {
-    \$("savedCount").textContent = String(saved.length);
-    \$("savedCountTop").textContent = String(saved.length);
+    $("savedCount").textContent = String(saved.length);
+    $("savedCountTop").textContent = String(saved.length);
   }
 
   function snapshot() {
@@ -3287,14 +3287,14 @@
 
   function openDialog(title, html, view) {
     dialogView = view;
-    \$("dialogTitle").textContent = title;
-    \$("dialogBody").innerHTML = html;
+    $("dialogTitle").textContent = title;
+    $("dialogBody").innerHTML = html;
 
-    if (!\$("managerDialog").open) $("managerDialog").showModal();
+    if (!$("managerDialog").open) $("managerDialog").showModal();
   }
 
   function closeDialog() {
-    \$("managerDialog").close();
+    $("managerDialog").close();
     dialogView = "";
   }
 
@@ -3339,7 +3339,7 @@
       "professional-login"
     );
 
-    requestAnimationFrame(() => \$("professionalPassword")?.focus());
+    requestAnimationFrame(() => $("professionalPassword")?.focus());
   }
 
   function savedDialog() {
@@ -3363,7 +3363,7 @@
           и архивными тарифами.
         </p>
 
-        \${saved.length ? saved.map(item => {
+        ${saved.length ? saved.map(item => {
           const date = new Date(item.created);
           const dateLabel = Number.isNaN(date.getTime())
             ? item.created
@@ -3375,29 +3375,29 @@
                 <label>
                   <input
                     type="checkbox"
-                    data-saved="\${esc(item.id)}"
-                    \${selectedSaved.has(item.id) ? "checked" : ""}
+                    data-saved="${esc(item.id)}"
+                    ${selectedSaved.has(item.id) ? "checked" : ""}
                   >
-                  <strong>\${esc(item.name)}</strong>
+                  <strong>${esc(item.name)}</strong>
                 </label>
-                <span class="saved-price">\${money(item.price)}</span>
+                <span class="saved-price">${money(item.price)}</span>
               </div>
 
               <p class="small">
-                \${esc(dateLabel)} ·
-                \${num(item.quantity)} шт. ·
-                тарифы \${esc(item.snapshot.config.meta.version)}
+                ${esc(dateLabel)} ·
+                ${num(item.quantity)} шт. ·
+                тарифы ${esc(item.snapshot.config.meta.version)}
               </p>
 
               <details class="section-gap">
                 <summary class="small">Состав заказа</summary>
-                <div class="saved-description">\${esc(item.description)}</div>
+                <div class="saved-description">${esc(item.description)}</div>
               </details>
 
-              \${pro && item.cost !== null ? `
+              ${pro && item.cost !== null ? `
                 <p class="small section-gap">
-                  Себестоимость: \${money(item.cost)}.
-                  Прибыль: \${money(item.price - item.cost)}.
+                  Себестоимость: ${money(item.cost)}.
+                  Прибыль: ${money(item.price - item.cost)}.
                 </p>
               ` : ""}
 
@@ -3405,19 +3405,19 @@
                 <button
                   class="button compact"
                   data-action="saved-load"
-                  data-id="\${esc(item.id)}"
+                  data-id="${esc(item.id)}"
                 >Открыть копию</button>
 
                 <button
                   class="button compact"
                   data-action="saved-item-copy"
-                  data-id="\${esc(item.id)}"
+                  data-id="${esc(item.id)}"
                 >Копировать документ</button>
 
                 <button
                   class="button compact danger"
                   data-action="saved-delete"
-                  data-id="\${esc(item.id)}"
+                  data-id="${esc(item.id)}"
                 >Удалить</button>
               </div>
             </article>
@@ -3435,7 +3435,7 @@
   }
 
   function renderSavedSum() {
-    const root = \$("savedSum");
+    const root = $("savedSum");
     if (!root) return;
 
     const items = saved.filter(x => selectedSaved.has(x.id));
@@ -3470,21 +3470,21 @@
           </button>
         </div>
 
-        \${templates.length ? templates.map(t => `
+        ${templates.length ? templates.map(t => `
           <div class="saved-item">
-            <strong>\${esc(t.name)}</strong>
+            <strong>${esc(t.name)}</strong>
             <div class="actions">
               <button
                 class="button compact"
                 data-action="template-load"
-                data-id="\${esc(t.id)}"
-                \${t.snapshot.order.product === "diecut" ? "disabled" : ""}
+                data-id="${esc(t.id)}"
+                ${t.snapshot.order.product === "diecut" ? "disabled" : ""}
               >Применить</button>
 
               <button
                 class="button compact danger"
                 data-action="template-delete"
-                data-id="\${esc(t.id)}"
+                data-id="${esc(t.id)}"
               >Удалить</button>
             </div>
           </div>
@@ -3534,10 +3534,10 @@
     return `
       <div class="table-scroll">
         <table><tbody>
-          \${Object.entries(obj).map(([key, value]) => `
+          ${Object.entries(obj).map(([key, value]) => `
             <tr>
-              <td>\${esc(RATE_NAMES[key] || key)}</td>
-              <td>\${esc(typeof value === "number" ? num(value) : String(value))}</td>
+              <td>${esc(RATE_NAMES[key] || key)}</td>
+              <td>${esc(typeof value === "number" ? num(value) : String(value))}</td>
             </tr>
           `).join("")}
         </tbody></table>
@@ -3557,12 +3557,12 @@
       `
         <div class="notice">
           Источник новых тарифов — <strong>prices.js</strong>.
-          Версия: \${esc(current.meta.version)}.
-          Дата: \${esc(current.meta.updated)}.
-          \${archived ? "<br>Текущий заказ использует архивный справочник." : ""}
+          Версия: ${esc(current.meta.version)}.
+          Дата: ${esc(current.meta.updated)}.
+          ${archived ? "<br>Текущий заказ использует архивный справочник." : ""}
         </div>
 
-        \${pro ? `
+        ${pro ? `
           <p class="muted">
             Приладки печати SRA3 и B2 принудительно отключены в формулах.
             Специальные приладки действуют только на офсете.
@@ -3571,7 +3571,7 @@
           <details class="foldout section-gap">
             <summary>Общие правила</summary>
             <div class="foldout-body">
-              \${objectTable({
+              ${objectTable({
                 "Наценка, %": current.markup,
                 "Гибридный блокнот": current.hybrid ? "Да" : "Нет",
                 "Предел гибридного тиража": current.hybridLimit
@@ -3581,30 +3581,30 @@
 
           <details class="foldout section-gap">
             <summary>Печать и отделка</summary>
-            <div class="foldout-body">\${objectTable(effectiveRates)}</div>
+            <div class="foldout-body">${objectTable(effectiveRates)}</div>
           </details>
 
           <details class="foldout section-gap">
             <summary>Дополнительные тарифы</summary>
-            <div class="foldout-body">\${objectTable(current.extra)}</div>
+            <div class="foldout-body">${objectTable(current.extra)}</div>
           </details>
 
           <details class="foldout section-gap">
             <summary>Специальные приладки офсета</summary>
             <div class="foldout-body">
-              \${objectTable({ ...current.policy, scope: "offset" })}
+              ${objectTable({ ...current.policy, scope: "offset" })}
             </div>
           </details>
 
           <details class="foldout section-gap">
             <summary>Бумага и материалы</summary>
             <div class="foldout-body">
-              \${Object.values(current.papers).map(p => `
+              ${Object.values(current.papers).map(p => `
                 <div class="detail-block">
-                  <h3>\${esc(p.label)}</h3>
+                  <h3>${esc(p.label)}</h3>
                   <p class="small">
-                    \${money(p.priceKg)}/кг ·
-                    \${money(p.priceSheet)}/лист.
+                    ${money(p.priceKg)}/кг ·
+                    ${money(p.priceSheet)}/лист.
                   </p>
                 </div>
               `).join("")}
@@ -3614,19 +3614,19 @@
           <details class="foldout section-gap">
             <summary>Календарные блоки</summary>
             <div class="foldout-body">
-              \${Object.keys(TIERS).map(tier => `
+              ${Object.keys(TIERS).map(tier => `
                 <div class="detail-block">
-                  <h3>\${TIERS[tier]}</h3>
-                  \${Object.values(current.polimat[tier]).map(b => `
-                    <p class="small">\${esc(b.name)} — ${money(b.price)}</p>
+                  <h3>${TIERS[tier]}</h3>
+                  ${Object.values(current.polimat[tier]).map(b => `
+                    <p class="small">${esc(b.name)} — ${money(b.price)}</p>
                   `).join("")}
                 </div>
               `).join("")}
 
-              \${["threeMini", "threeMidi"].map(key => `
+              ${["threeMini", "threeMidi"].map(key => `
                 <p class="small section-gap">
-                  \${esc(current.polimat[key].name)} —
-                  \${money(current.polimat[key].price)}
+                  ${esc(current.polimat[key].name)} —
+                  ${money(current.polimat[key].price)}
                 </p>
               `).join("")}
             </div>
@@ -3696,8 +3696,8 @@
       area.style.position = "fixed";
       area.style.opacity = "0";
 
-      const parent = \$("managerDialog").open
-        ? \$("managerDialog")
+      const parent = $("managerDialog").open
+        ? $("managerDialog")
         : document.body;
 
       parent.appendChild(area);
@@ -3745,7 +3745,7 @@
       console.error(error);
       toast("Импорт не выполнен: " + error.message);
     } finally {
-      \$("importFile").value = "";
+      $("importFile").value = "";
     }
   }
 
@@ -3966,8 +3966,8 @@
     if (event.target.id !== "professionalLoginForm") return;
     event.preventDefault();
 
-    const password = \$("professionalPassword");
-    const error = \$("professionalLoginError");
+    const password = $("professionalPassword");
+    const error = $("professionalLoginError");
 
     if (password.value !== PROFESSIONAL_PASSWORD) {
       error.textContent = "Неверный пароль.";
@@ -4007,7 +4007,7 @@
           if (pro) {
             pro = false;
 
-            if (\$("managerDialog").open) closeDialog();
+            if ($("managerDialog").open) closeDialog();
 
             renderAll();
             toast("Профессиональный режим закрыт.");
