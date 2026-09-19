@@ -546,3 +546,75 @@ window.PRINT_PRICES = {
     }
   }
 };
+/*
+ * ОБНОВЛЕНИЕ SLONPRESS
+ * Все новые изменяемые цены находятся здесь.
+ */
+
+// После изменения цен обновляйте версию и дату.
+window.PRINT_PRICES.meta.version = "2026-09-19.2";
+window.PRINT_PRICES.meta.updated = "2026-09-19";
+window.PRINT_PRICES.meta.source = "Тарифы SlonPress.ru";
+
+// На цифровой печати нет отдельной платы за приладку печати.
+window.PRINT_PRICES.rates.digitalSetup = 0;
+window.PRINT_PRICES.rates.b2Setup = 0;
+
+// Специальные приладки брошюр и блокнотов — только для офсета.
+window.PRINT_PRICES.policy.scope = "offset";
+
+Object.assign(window.PRINT_PRICES.extra, {
+  /*
+   * Плоттер для листовок.
+   * Оплата по физическим секциям 320×450 мм.
+   * Минимальная сумма применяется один раз на весь заказ.
+   */
+  flyerPlotterSheet: 150,
+  flyerPlotterMinimum: 1500,
+
+  /*
+   * Покупной календарный блок Полимат.
+   * Цена одного готового покупного блока на один календарь.
+   * Не умножается на количество страниц внутри блока.
+   */
+  tentPolimatBlock: 25,
+
+  // Размер покупного блока, мм.
+  tentPolimatW: 205,
+  tentPolimatH: 95
+});
+
+// Возможность плоттерной резки у компонента листовок.
+window.PRINT_PRICES.component.plotter = false;
+
+// Отдельная верхняя обложка для домика с покупным блоком.
+if (
+  !window.PRINT_PRICES.products.tent.components.some(
+    component => component.role === "cover"
+  )
+) {
+  window.PRINT_PRICES.products.tent.components.push({
+    name: "Верхняя обложка",
+    role: "cover",
+    enabled: false,
+
+    w: 205,
+    h: 95,
+
+    mode: "units",
+    units: 1,
+
+    paper: "matt",
+    density: 300,
+    color: "4+0",
+
+    cutting: true,
+    lamination: "none",
+
+    score: false,
+    folding: false,
+    diecut: false,
+
+    setups: 1
+  });
+}
