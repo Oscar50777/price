@@ -685,8 +685,13 @@
     const e = c.extra;
     const printed = SIDES[p.color] > 0;
     const count = printed ? l.forms : 0;
-    const special = c.policy.scope === "all" || sheet.group === "offset";
-    let setupRate = printed ? r[sheet.group + "Setup"] : 0;
+    // Приладка печати оплачивается только на офсете.
+const isOffset = sheet.group === "offset";
+const special = isOffset;
+
+let setupRate = printed && isOffset
+  ? r.offsetSetup
+  : 0;
 
     if (printed && d.product === "bloknot" && special && !ordinarySetup) {
       setupRate = c.policy[{
