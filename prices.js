@@ -618,3 +618,89 @@ if (
     setups: 1
   });
 }
+
+/*
+ * Тарифы материалов и ограничения оборудования.
+ * Идентификаторы листов:
+ * Z — SRA3 320×450;
+ * B — офсет 470×620;
+ * A — офсет 500×700.
+ */
+
+window.PRINT_PRICES.meta.version = "2026-09-21.1";
+window.PRINT_PRICES.meta.updated = "2026-09-21";
+
+Object.assign(window.PRINT_PRICES.papers.offset, {
+  density: 80,
+  densities: [80, 100, 120, 160, 190],
+  priceMode: "kg",
+  priceKg: 125
+});
+
+Object.assign(window.PRINT_PRICES.papers.cardboard, {
+  density: 300,
+  densities: [215, 230, 250, 270, 300, 325],
+  priceMode: "kg",
+  priceKg: 140
+});
+
+Object.assign(window.PRINT_PRICES.papers.designer, {
+  density: 300,
+  densities: [300],
+  priceMode: "sheet",
+  priceSheet: 75,
+  allowedSheets: ["Z"],
+  sheetPrices: {
+    Z: 75
+  }
+});
+
+// Пока одинаковый тариф для бумажной самоклейки и плёнки.
+for (const paperId of ["adhesive", "adhesiveFilm"]) {
+  Object.assign(window.PRINT_PRICES.papers[paperId], {
+    density: 80,
+    densities: [80],
+    priceMode: "sheet",
+    priceSheet: 20,
+    allowedSheets: ["Z", "B", "A"],
+    sheetPrices: {
+      Z: 20,
+      B: 22,
+      A: 25
+    }
+  });
+}
+
+/*
+ * Приводим стартовые настройки изделий к новому справочнику.
+ * В частности, прежняя подложка из картона 350 г/м²
+ * заменяется на 300 г/м².
+ * Сохранённые в браузере документы не изменяются.
+ */
+for (const productSettings of Object.values(
+  window.PRINT_PRICES.products
+)) {
+  for (const spec of productSettings.components) {
+    const paperId =
+      spec.paper || window.PRINT_PRICES.component.paper;
+
+    const paper = window.PRINT_PRICES.papers[paperId];
+
+    if (!paper?.densities) continue;
+
+    if (
+      spec.density !== undefined &&
+      !paper.densities.includes(spec.density)
+    ) {
+      spec.density = paper.density;
+    }
+
+    spec.priceMode = paper.priceMode;
+
+    if (paper.priceMode === "kg") {
+      spec.priceKg = paper.priceKg;
+    } else {
+      spec.priceSheet = paper.priceSheet;
+    }
+  }
+}
