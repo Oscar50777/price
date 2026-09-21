@@ -110,6 +110,22 @@
     A2: { w: 420, h: 594 }
   };
 
+  // Быстрые размеры листовок. Размеры в миллиметрах.
+const FLYER_FORMATS = [
+  { id: "50x90", label: "50×90", w: 50, h: 90 },
+  { id: "euro", label: "Евро", w: 99, h: 210 },
+  { id: "A6", label: "А6", w: 105, h: 148 },
+  { id: "A5", label: "А5", w: 148, h: 210 },
+  { id: "A4", label: "А4", w: 210, h: 297 },
+  { id: "A3", label: "А3", w: 297, h: 420 },
+  { id: "A2", label: "А2", w: 420, h: 594 },
+  { id: "A2max", label: "А2 макс", w: 480, h: 680 }
+];
+
+// Быстрый выбор плотности бумаги, г/м².
+const FLYER_DENSITIES = [
+  80, 90, 115, 130, 150, 170, 200, 250, 300, 350
+];
   const TIERS = {
     mini: "Мини",
     midi: "Миди",
@@ -2076,6 +2092,55 @@
     );
   }
 
+  function renderFlyerPresets(p, index) {
+  if (order.product !== "flyer") return "";
+
+  return `
+    <div class="section-gap">
+      <h3>Стандартный размер</h3>
+
+      <div class="quick">
+        ${FLYER_FORMATS.map(format => {
+          const active =
+            (p.w === format.w && p.h === format.h) ||
+            (p.w === format.h && p.h === format.w);
+
+          return `
+            <button
+              type="button"
+              data-action="flyer-size"
+              data-index="${index}"
+              data-value="${esc(format.id)}"
+              class="${active ? "active" : ""}"
+              aria-pressed="${active}"
+              title="${format.w}×${format.h} мм"
+            >
+              ${esc(format.label)}
+            </button>
+          `;
+        }).join("")}
+      </div>
+
+      <h3>Плотность бумаги, г/м²</h3>
+
+      <div class="quick">
+        ${FLYER_DENSITIES.map(density => `
+          <button
+            type="button"
+            data-action="flyer-density"
+            data-index="${index}"
+            data-value="${density}"
+            class="${p.density === density ? "active" : ""}"
+            aria-pressed="${p.density === density}"
+          >
+            ${density}
+          </button>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+  
   function renderComponents() {
     const advanced = advancedComponents();
 
@@ -2148,7 +2213,9 @@
             ` : ""}
           </div>
 
-          ${p.enabled ? `
+                   ${p.enabled ? `
+            ${renderFlyerPresets(p, i)}
+
             <div class="fields">
               ${!locked ? `
                 ${input("Ширина по макету, мм", path("w"), p.w, { min: 1 })}
@@ -4030,6 +4097,57 @@
         case "format":
           setFormat(button.dataset.scope, button.dataset.value);
           break;
+
+                  case "flyer-size": {
+          if (order.product !== "flyer") return;
+
+          const index = Number(button.dataset.index);
+
+          if (
+            !Number.isInteger(index) ||
+            index < 0 ||
+            index >= order.components.length
+          ) return;
+
+          const component = order.components[index];
+          if (!component.enabled) return;
+
+          const format = FLYER_FORMATS.find(
+            item => item.id === button.dataset.value
+          );
+
+          if (!format) return;
+
+          component.w = format.w;
+          component.h = format.h;
+
+          selectedMethod = null;
+          renderAll();
+          break;
+        }
+
+        case "flyer-density": {
+          if (order.product !== "flyer") return;
+
+          const index = Number(button.dataset.index);
+          const density = Number(button.dataset.value);
+
+          if (
+            !Number.isInteger(index) ||
+            index < 0 ||
+            index >= order.components.length ||
+            !FLYER_DENSITIES.includes(density)
+          ) return;
+
+          const component = order.components[index];
+          if (!component.enabled) return;
+
+          component.density = density;
+
+          selectedMethod = null;
+          renderAll();
+          break;
+        }
 
                 case "bag-preset":
           Object.assign(
