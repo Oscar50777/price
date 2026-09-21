@@ -1,16 +1,6 @@
 "use strict";
 
 (() => {
-  // ============================================================
-  // SLONPRESS.RU — КАЛЬКУЛЯТОР ПОЛИГРАФИИ
-  //
-  // Цены: window.PRINT_PRICES из prices.js.
-  // HTML/CSS: совместимы с ранее выданной сборкой.
-  // Хранилище: совместимо со снимками этой сборки.
-  //
-  // Пароль — ограничение интерфейса, не серверная авторизация.
-  // ============================================================
-
   const PROFESSIONAL_PASSWORD = "507";
   const STORAGE_KEY = "print_studio_2026_v1";
   const DATABASE_VERSION = 1;
@@ -23,7 +13,9 @@
   const integer = value => Number.isSafeInteger(value) && value > 0;
   const whole = value => Number.isSafeInteger(value) && value >= 0;
   const object = value =>
-    value !== null && typeof value === "object" && !Array.isArray(value);
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value);
 
   const esc = value => String(value ?? "").replace(/[&<>"']/g, ch => ({
     "&": "&amp;",
@@ -33,7 +25,8 @@
     "'": "&#39;"
   }[ch]));
 
-  const uid = () => globalThis.crypto?.randomUUID?.() ||
+  const uid = () =>
+    globalThis.crypto?.randomUUID?.() ||
     Date.now().toString(36) + Math.random().toString(36).slice(2);
 
   const money = value => new Intl.NumberFormat("ru-RU", {
@@ -48,7 +41,7 @@
 
   const PRODUCTS = [
     ["flyer", "Листовки", "Печатная продукция", "▤",
-      "Размер, материал, печать и все параметры обработки."],
+      "Размер, материал, печать, обработка и размещение на листе."],
     ["broshyura", "Брошюры", "Печатная продукция", "▥",
       "Готовый размер страницы. Полосы блока — без обложки, кратно четырём."],
     ["bloknot", "Блокноты", "Печатная продукция", "▧",
@@ -75,7 +68,6 @@
       "Продажные тарифы по площади, количеству или времени."]
   ];
 
-  // Только для открытия старых сохранённых расчётов.
   const LEGACY_PRODUCT = [
     "diecut", "Изделия с вырубкой — архив",
     "Архивное изделие", "⌁",
@@ -110,22 +102,21 @@
     A2: { w: 420, h: 594 }
   };
 
-  // Быстрые размеры листовок. Размеры в миллиметрах.
-const FLYER_FORMATS = [
-  { id: "50x90", label: "50×90", w: 50, h: 90 },
-  { id: "euro", label: "Евро", w: 99, h: 210 },
-  { id: "A6", label: "А6", w: 105, h: 148 },
-  { id: "A5", label: "А5", w: 148, h: 210 },
-  { id: "A4", label: "А4", w: 210, h: 297 },
-  { id: "A3", label: "А3", w: 297, h: 420 },
-  { id: "A2", label: "А2", w: 420, h: 594 },
-  { id: "A2max", label: "А2 макс", w: 480, h: 680 }
-];
+  const FLYER_FORMATS = [
+    { id: "50x90", label: "50×90", w: 50, h: 90 },
+    { id: "euro", label: "Евро", w: 99, h: 210 },
+    { id: "A6", label: "А6", w: 105, h: 148 },
+    { id: "A5", label: "А5", w: 148, h: 210 },
+    { id: "A4", label: "А4", w: 210, h: 297 },
+    { id: "A3", label: "А3", w: 297, h: 420 },
+    { id: "A2", label: "А2", w: 420, h: 594 },
+    { id: "A2max", label: "А2 макс", w: 480, h: 680 }
+  ];
 
-// Быстрый выбор плотности бумаги, г/м².
-const FLYER_DENSITIES = [
-  80, 90, 115, 130, 150, 170, 200, 250, 300, 350
-];
+  const FLYER_DENSITIES = [
+    80, 90, 115, 130, 150, 170, 200, 250, 300, 350
+  ];
+
   const TIERS = {
     mini: "Мини",
     midi: "Миди",
@@ -156,10 +147,43 @@ const FLYER_DENSITIES = [
     plotterMinimum: "Доплата до минимума плоттера"
   };
 
+  const RATE_NAMES = {
+    digitalPrint: "SRA3, ₽/лист/сторона",
+    b2Print: "B2, ₽/лист/сторона",
+    offsetPrint: "Офсет, ₽/лист/сторона",
+    digitalSetup: "Приладка SRA3 — не применяется",
+    b2Setup: "Приладка B2 — не применяется",
+    offsetSetup: "Приладка офсета, ₽",
+    digitalSpoil: "Запас SRA3, листов/форму",
+    b2Spoil: "Запас B2, листов/форму",
+    offsetSpoil: "Запас офсета, листов/форму",
+    cutting: "Резка, ₽/лист",
+    cuttingSetup: "Настройка резки, ₽",
+    lamination: "Ламинация, ₽/лист/сторона",
+    softDigital: "Софт-тач SRA3, ₽/лист/сторона",
+    softOther: "Софт-тач прочие, ₽/лист/сторона",
+    laminationSetup: "Настройка ламинации, ₽",
+    score: "Биговка, ₽/биг",
+    scoreSetup: "Настройка биговки, ₽",
+    folding: "Фальцовка, ₽/элемент",
+    foldingSetup: "Настройка фальцовки, ₽",
+    diecut: "Вырубка, ₽/удар",
+    diecutSetup: "Настройка вырубки, ₽",
+    uv: "УФ-лак, ₽/лист",
+    uvSetup: "Настройка УФ-лака, ₽",
+    emboss: "Тиснение, ₽/элемент",
+    embossSetup: "Настройка тиснения, ₽",
+    rounding: "Округление вверх, ₽",
+    flyerPlotterSheet: "Плоттер листовок, ₽/секция 320×450",
+    flyerPlotterMinimum: "Минимум плоттера листовок, ₽/заказ",
+    tentPolimatBlock: "Покупной блок домика, ₽/шт.",
+    tentPolimatW: "Ширина покупного блока, мм",
+    tentPolimatH: "Высота покупного блока, мм"
+  };
+
   const isBook = o => ["bloknot", "broshyura"].includes(o.product);
   const isSticker = o => ["stickers", "stickerpack"].includes(o.product);
   const advancedComponents = () => pro || order.product === "flyer";
-
   const tierKey = (tier, suffix) =>
     "quarter" + tier[0].toUpperCase() + tier.slice(1) + suffix;
 
@@ -169,20 +193,18 @@ const FLYER_DENSITIES = [
   let derived;
   let chosen = null;
   let methods = [];
-
   let pro = false;
   let archived = false;
   let selectedMethod = null;
-
   let saved = [];
   let templates = [];
   let selectedSaved = new Set();
-
   let timer = 0;
   let toastTimer = 0;
   let dialogView = "";
   let ready = false;
   let storageReadable = true;
+  let previewState = null;
 
   // ============================================================
   // ОБЩИЕ ФУНКЦИИ
@@ -199,25 +221,18 @@ const FLYER_DENSITIES = [
 
   function setPath(target, path, value) {
     const keys = path.split(".");
-
     if (keys.some(key =>
       ["__proto__", "prototype", "constructor"].includes(key)
     )) return false;
 
     let node = target;
-
     for (const key of keys.slice(0, -1)) {
-      if (!node || !Object.prototype.hasOwnProperty.call(node, key)) {
-        return false;
-      }
+      if (!node || !Object.hasOwn(node, key)) return false;
       node = node[key];
     }
 
     const key = keys.at(-1);
-
-    if (!node || !Object.prototype.hasOwnProperty.call(node, key)) {
-      return false;
-    }
+    if (!node || !Object.hasOwn(node, key)) return false;
 
     node[key] = value;
     return true;
@@ -226,7 +241,6 @@ const FLYER_DENSITIES = [
   function roundUp(value, step) {
     const unit = step > 0 ? step : 0.01;
     const quotient = value / unit;
-
     return Math.ceil(
       quotient -
       Number.EPSILON * Math.max(1, Math.abs(quotient)) * 8
@@ -245,7 +259,8 @@ const FLYER_DENSITIES = [
   }
 
   function validCost(value) {
-    return nonnegative(value) && value <= Number.MAX_SAFE_INTEGER / 100;
+    return nonnegative(value) &&
+      value <= Number.MAX_SAFE_INTEGER / 100;
   }
 
   function requireExtra(c, keys) {
@@ -260,12 +275,148 @@ const FLYER_DENSITIES = [
   }
 
   // ============================================================
+  // МАТЕРИАЛЫ ЛИСТОВОК
+  // ============================================================
+
+  function flyerCatalogPrice(p) {
+    return [
+      "offset", "cardboard", "designer", "adhesive"
+    ].includes(p.paper);
+  }
+
+  function flyerDensities(p, c) {
+    const values = c.papers[p.paper]?.densities;
+    return Array.isArray(values) && values.length
+      ? values
+      : FLYER_DENSITIES;
+  }
+
+  function flyerMaterialErrors(p, c) {
+    const errors = [];
+
+    if (p.paper === "adhesiveFilm") {
+      errors.push(
+        "самоклеящаяся плёнка недоступна для листовок. " +
+        "Выберите другой материал."
+      );
+    }
+
+    const values = c.papers[p.paper]?.densities;
+    if (
+      Array.isArray(values) &&
+      values.length &&
+      !values.includes(p.density)
+    ) {
+      errors.push(
+        "допустимая плотность: " +
+        values.join(", ") +
+        " г/м²."
+      );
+    }
+
+    return errors;
+  }
+
+  function flyerPaperCost(p, sheet, c) {
+    const paper = c.papers[p.paper];
+    if (!paper) throw new Error("Неизвестный материал.");
+
+    if (p.paper === "adhesiveFilm") {
+      throw new Error(
+        "Самоклеящаяся плёнка недоступна для листовок."
+      );
+    }
+
+    if (p.paper === "designer" && sheet.id !== "Z") {
+      throw new Error(
+        "Дизайнерская бумага — только SRA3 320×450 мм."
+      );
+    }
+
+    if (
+      p.paper === "adhesive" &&
+      !["Z", "B", "A"].includes(sheet.id)
+    ) {
+      throw new Error(
+        "Самоклейка — только SRA3, 470×620 и 500×700 мм. " +
+        "Для B2 материала нет."
+      );
+    }
+
+    if (
+      Array.isArray(paper.allowedSheets) &&
+      !paper.allowedSheets.includes(sheet.id)
+    ) {
+      throw new Error(
+        "Материал недоступен на выбранном формате листа."
+      );
+    }
+
+    if (p.paper === "designer") {
+      const rate = paper.sheetPrices?.Z ?? paper.priceSheet;
+      if (!nonnegative(rate)) {
+        throw new Error("Не задана цена дизайнерской бумаги.");
+      }
+      return rate;
+    }
+
+    if (p.paper === "adhesive") {
+      const rate = paper.sheetPrices?.[sheet.id];
+      if (!nonnegative(rate)) {
+        throw new Error(
+          "Не задана цена самоклейки для этого листа. " +
+          "Примените текущие тарифы."
+        );
+      }
+      return rate;
+    }
+
+    if (["offset", "cardboard"].includes(p.paper)) {
+      return sheet.w * sheet.h / 1000000 *
+        p.density / 1000 * paper.priceKg;
+    }
+
+    return p.priceMode === "sheet"
+      ? p.priceSheet
+      : sheet.w * sheet.h / 1000000 *
+        p.density / 1000 * p.priceKg;
+  }
+
+  function flyerTariffText(p, c) {
+    const paper = c.papers[p.paper];
+    if (!paper) return "";
+
+    if (p.paper === "adhesive") {
+      const rate = id => nonnegative(paper.sheetPrices?.[id])
+        ? money(paper.sheetPrices[id])
+        : "тариф не задан";
+
+      return (
+        `SRA3 — ${rate("Z")}/лист; ` +
+        `470×620 — ${rate("B")}/лист; ` +
+        `500×700 — ${rate("A")}/лист. ` +
+        "Другие форматы, включая B2, недоступны."
+      );
+    }
+
+    if (p.paper === "designer") {
+      const rate = paper.sheetPrices?.Z ?? paper.priceSheet;
+      return `${money(rate)}/лист SRA3. Другие форматы не рассчитываются.`;
+    }
+
+    if (["offset", "cardboard"].includes(p.paper)) {
+      return `${money(paper.priceKg)}/кг. Цена из справочника тарифов.`;
+    }
+
+    return "";
+  }
+
+  // ============================================================
   // ПРОВЕРКА СПРАВОЧНИКА
   // ============================================================
 
   function validateConfig(c) {
     const errors = [];
-
     if (!object(c)) return ["Не найден window.PRINT_PRICES."];
 
     if (!c.meta?.version || !c.meta?.updated) {
@@ -287,13 +438,14 @@ const FLYER_DENSITIES = [
         errors.push("Нет раздела " + group + ".");
         continue;
       }
-
       for (const [key, value] of Object.entries(c[group])) {
-        if (!nonnegative(value)) errors.push("Некорректный тариф: " + key);
+        if (!nonnegative(value)) {
+          errors.push("Некорректный тариф: " + key);
+        }
       }
     }
 
-    const requiredRates = [
+    const rates = [
       "digitalPrint", "b2Print", "offsetPrint", "offsetSetup",
       "digitalSpoil", "b2Spoil", "offsetSpoil",
       "cutting", "cuttingSetup", "lamination",
@@ -303,7 +455,7 @@ const FLYER_DENSITIES = [
       "emboss", "embossSetup", "rounding"
     ];
 
-    for (const key of requiredRates) {
+    for (const key of rates) {
       if (!nonnegative(c.rates?.[key])) {
         errors.push("Не задан rates." + key);
       }
@@ -315,7 +467,7 @@ const FLYER_DENSITIES = [
       }
     }
 
-    const requiredExtra = [
+    const extras = [
       "notebookA6", "notebookA5", "notebookA4", "notebookCustom",
       "brochureAssembly", "wallAssembly", "tentAssembly",
       "tentMountedBase", "stickerPaperM2", "stickerFilmM2",
@@ -334,7 +486,7 @@ const FLYER_DENSITIES = [
       "uvDesigner44", "uvDesigner44White", "uvDesignerSoft"
     ];
 
-    for (const key of requiredExtra) {
+    for (const key of extras) {
       if (!nonnegative(c.extra?.[key])) {
         errors.push("Не задан extra." + key);
       }
@@ -366,28 +518,30 @@ const FLYER_DENSITIES = [
         "notebook10", "notebook40", "notebook11", "notebook44",
         "brochure2", "brochure3", "brochure4"
       ]) {
-        if (!nonnegative(c.policy[key])) errors.push("Проверьте policy." + key);
+        if (!nonnegative(c.policy[key])) {
+          errors.push("Проверьте policy." + key);
+        }
       }
     }
+
+    const sheetIds = new Set();
 
     if (!Array.isArray(c.sheets) || !c.sheets.length) {
       errors.push("Нет форматов оборудования.");
     } else {
-      const ids = new Set();
-
       for (const s of c.sheets) {
         if (
-          !s.id || ids.has(s.id) ||
+          !s.id || sheetIds.has(s.id) ||
           ![s.w, s.h, s.pw, s.ph].every(positive) ||
           s.pw > s.w || s.ph > s.h ||
           !["digital", "b2", "offset"].includes(s.group)
         ) {
           errors.push("Некорректный формат оборудования.");
         }
-        ids.add(s.id);
+        sheetIds.add(s.id);
       }
 
-      if (!ids.has("Z") || !ids.has("E")) {
+      if (!sheetIds.has("Z") || !sheetIds.has("E")) {
         errors.push("Необходимы форматы Z и E.");
       }
     }
@@ -401,15 +555,53 @@ const FLYER_DENSITIES = [
           !nonnegative(p.priceKg) ||
           !nonnegative(p.priceSheet) ||
           !["kg", "sheet"].includes(p.priceMode)
-        ) errors.push("Проверьте цены и плотность материалов.");
+        ) {
+          errors.push("Проверьте цены и плотность материалов.");
+        }
+
+        if (
+          p.densities !== undefined &&
+          (
+            !Array.isArray(p.densities) ||
+            !p.densities.length ||
+            !p.densities.every(positive) ||
+            !p.densities.includes(p.density)
+          )
+        ) {
+          errors.push("Проверьте список плотностей материала.");
+        }
+
+        if (
+          p.allowedSheets !== undefined &&
+          (
+            !Array.isArray(p.allowedSheets) ||
+            !p.allowedSheets.length ||
+            !p.allowedSheets.every(id => sheetIds.has(id))
+          )
+        ) {
+          errors.push("Проверьте разрешённые листы материала.");
+        }
+
+        if (
+          p.sheetPrices !== undefined &&
+          (
+            !object(p.sheetPrices) ||
+            !Object.entries(p.sheetPrices).every(
+              ([id, value]) => sheetIds.has(id) && nonnegative(value)
+            )
+          )
+        ) {
+          errors.push("Проверьте цены материалов по форматам листов.");
+        }
       }
     }
 
     for (const tier of Object.keys(TIERS)) {
       const geometry = c.calendar?.[tier];
-
-      if (!geometry ||
-          ![geometry.w, geometry.headH, geometry.backingH].every(positive)) {
+      if (
+        !geometry ||
+        ![geometry.w, geometry.headH, geometry.backingH].every(positive)
+      ) {
         errors.push("Проверьте размеры календарей.");
       }
 
@@ -432,7 +624,6 @@ const FLYER_DENSITIES = [
     } else {
       for (const [id] of PRODUCTS) {
         const p = c.products[id];
-
         if (!p || !Array.isArray(p.components)) {
           errors.push("Не задано изделие: " + id);
           continue;
@@ -450,13 +641,12 @@ const FLYER_DENSITIES = [
   }
 
   // ============================================================
-  // СОЗДАНИЕ И НОРМАЛИЗАЦИЯ ЗАКАЗА
+  // СОЗДАНИЕ ЗАКАЗА
   // ============================================================
 
   function makeComponent(c, spec = {}) {
     const paperId = spec.paper || c.component.paper;
     const material = c.papers[paperId];
-
     if (!material) throw new Error("Не найден материал: " + paperId);
 
     return {
@@ -475,6 +665,7 @@ const FLYER_DENSITIES = [
     }
 
     for (const p of o.components) {
+      if (!object(p)) throw new Error("Повреждён компонент заказа.");
       if (typeof p.plotter !== "boolean") p.plotter = false;
       if (!p.id) p.id = uid();
     }
@@ -513,16 +704,14 @@ const FLYER_DENSITIES = [
     const p = c.products[id];
     if (!p) throw new Error("Нет исходных настроек изделия: " + id);
 
-    const o = {
+    return normalizeOrder({
       product: id,
       name: product(id)[1],
       quantity: id === "uvprint" ? 1 : c.defaultQuantity,
       note: "",
-
       bookFormat: "A5",
       customBook: { w: 148, h: 210 },
       wall: { format: "A3", w: 297, h: 420 },
-
       bag: {
         a: 300,
         b: 400,
@@ -533,7 +722,6 @@ const FLYER_DENSITIES = [
         includeStamp: false,
         outerContour: false
       },
-
       calendar: {
         size: "mini",
         tier: "mini",
@@ -543,15 +731,12 @@ const FLYER_DENSITIES = [
         customHeadH: 210,
         customBackingH: 210
       },
-
       three: { size: "mini" },
-
       tent: {
         mounted: false,
         format: "A5",
         blockMode: "printed"
       },
-
       uv: {
         type: "adhesive",
         w: 1000,
@@ -561,12 +746,9 @@ const FLYER_DENSITIES = [
         designerColor: "4+0",
         softTouch: false
       },
-
       ...clone(p),
       components: p.components.map(spec => makeComponent(c, spec))
-    };
-
-    return normalizeOrder(o, c, true);
+    }, c, true);
   }
 
   // ============================================================
@@ -694,7 +876,7 @@ const FLYER_DENSITIES = [
 
     if (d.product === "paket") {
       const g = bagGeometry(d.bag);
-      const p = d.components.find(component => component.role === "bag");
+      const p = d.components.find(item => item.role === "bag");
 
       if (p) {
         Object.assign(p, {
@@ -777,21 +959,16 @@ const FLYER_DENSITIES = [
 
     if (d.product === "wall") {
       const f = FORMATS[d.wall.format] || d.wall;
-
       d.components.forEach(p => {
         p.w = f.w;
         p.h = f.h;
       });
-
       d.assembly = c.extra.wallAssembly;
     }
 
     if (d.product === "tent") {
       d.assembly = c.extra.tentAssembly;
-
-      if (d.tent.mounted) {
-        d.accessories += c.extra.tentMountedBase;
-      }
+      if (d.tent.mounted) d.accessories += c.extra.tentMountedBase;
 
       const mode = d.tent.blockMode || "printed";
       const format = d.tent.format || "custom";
@@ -848,11 +1025,23 @@ const FLYER_DENSITIES = [
 
     if (d.product === "flyer") {
       for (const p of d.components) {
+        const paper = c.papers[p.paper];
+
+        if (paper && flyerCatalogPrice(p)) {
+          Object.assign(p, {
+            priceMode: paper.priceMode,
+            priceKg: paper.priceKg,
+            priceSheet: paper.priceSheet
+          });
+        }
+
         if (!p.enabled || !p.plotter) continue;
 
-        requireExtra(c, ["flyerPlotterSheet", "flyerPlotterMinimum"]);
+        requireExtra(c, [
+          "flyerPlotterSheet",
+          "flyerPlotterMinimum"
+        ]);
 
-        // Плоттер заменяет обычную резку компонента.
         p.cutting = false;
       }
     }
@@ -864,7 +1053,7 @@ const FLYER_DENSITIES = [
   // ПРОВЕРКА ЗАКАЗА
   // ============================================================
 
-  function validateOrder(d, c) {
+  function validateOrder(d, c, options = {}) {
     const errors = [];
 
     if (!product(d.product)) errors.push("Неизвестное изделие.");
@@ -879,13 +1068,17 @@ const FLYER_DENSITIES = [
         errors.push("Неизвестный вид УФ-печати.");
       }
 
-      if (!["pens", "timedSheet"].includes(u.type) &&
-          ![u.w, u.h].every(positive)) {
+      if (
+        !["pens", "timedSheet"].includes(u.type) &&
+        ![u.w, u.h].every(positive)
+      ) {
         errors.push("Укажите положительные размеры отпечатка.");
       }
 
-      if (u.type === "custom" &&
-          fit(c.extra.uvBedW, c.extra.uvBedH, u.w, u.h) < 1) {
+      if (
+        u.type === "custom" &&
+        fit(c.extra.uvBedW, c.extra.uvBedH, u.w, u.h) < 1
+      ) {
         errors.push("Изделие не помещается на стол УФ-печати.");
       }
 
@@ -906,24 +1099,32 @@ const FLYER_DENSITIES = [
       }
     }
 
-    if (!Array.isArray(d.components) ||
-        d.components.length > 100 ||
-        !d.components.some(p => p.enabled)) {
+    if (
+      !Array.isArray(d.components) ||
+      d.components.length > 100 ||
+      !d.components.some(p => p.enabled)
+    ) {
       errors.push("Нужен активный компонент. Максимум — 100 компонентов.");
       return errors;
     }
 
-    if (d.product === "threeinone" &&
-        (d.components.length !== 1 ||
-         !["mini", "midi"].includes(d.three.size))) {
+    if (
+      d.product === "threeinone" &&
+      (
+        d.components.length !== 1 ||
+        !["mini", "midi"].includes(d.three.size)
+      )
+    ) {
       errors.push("Календарь 3 в 1: одна основа, размер мини или миди.");
     }
 
     if (d.product === "paket") {
       const b = d.bag;
 
-      if (![b.a, b.b, b.c].every(positive) ||
-          b.c < 2 || b.b < b.c / 2) {
+      if (
+        ![b.a, b.b, b.c].every(positive) ||
+        b.c < 2 || b.b < b.c / 2
+      ) {
         errors.push("Проверьте размеры пакета.");
       }
 
@@ -949,8 +1150,10 @@ const FLYER_DENSITIES = [
         errors.push("Проверьте комплектацию домика.");
       }
 
-      if (d.tent.blockMode === "polimatCover" &&
-          d.components.filter(p => p.role === "cover" && p.enabled).length !== 1) {
+      if (
+        d.tent.blockMode === "polimatCover" &&
+        d.components.filter(p => p.role === "cover" && p.enabled).length !== 1
+      ) {
         errors.push("Нужна одна верхняя печатная обложка.");
       }
     }
@@ -962,7 +1165,15 @@ const FLYER_DENSITIES = [
         errors.push(prefix + "проверьте размер и плотность.");
       }
 
-      if (!c.papers[p.paper]) errors.push(prefix + "неизвестный материал.");
+      if (!c.papers[p.paper]) {
+        errors.push(prefix + "неизвестный материал.");
+      }
+
+      if (d.product === "flyer" && !options.snapshot) {
+        errors.push(
+          ...flyerMaterialErrors(p, c).map(text => prefix + text)
+        );
+      }
 
       if (!nonnegative(p.bleed) || !integer(p.setups)) {
         errors.push(prefix + "проверьте вылеты и комплекты форм.");
@@ -984,13 +1195,17 @@ const FLYER_DENSITIES = [
         errors.push(prefix + "число элементов должно быть целым положительным.");
       }
 
-      if (!["kg", "sheet"].includes(p.priceMode) ||
-          !nonnegative(p.priceMode === "kg" ? p.priceKg : p.priceSheet)) {
+      if (
+        !["kg", "sheet"].includes(p.priceMode) ||
+        !nonnegative(p.priceMode === "kg" ? p.priceKg : p.priceSheet)
+      ) {
         errors.push(prefix + "проверьте цену бумаги.");
       }
 
-      if (!["none", "gloss", "soft"].includes(p.lamination) ||
-          ![1, 2].includes(p.lamSides)) {
+      if (
+        !["none", "gloss", "soft"].includes(p.lamination) ||
+        ![1, 2].includes(p.lamSides)
+      ) {
         errors.push(prefix + "проверьте ламинацию.");
       }
 
@@ -998,7 +1213,10 @@ const FLYER_DENSITIES = [
         errors.push(prefix + "проверьте число бигов.");
       }
 
-      if (p.diecut && (!integer(p.perStamp) || !nonnegative(p.stamp))) {
+      if (
+        p.diecut &&
+        (!integer(p.perStamp) || !nonnegative(p.stamp))
+      ) {
         errors.push(prefix + "проверьте штамп.");
       }
 
@@ -1032,7 +1250,7 @@ const FLYER_DENSITIES = [
   // ПЛОТТЕРНАЯ РАСКЛАДКА
   // ============================================================
 
-  function plotterSections(p, sheet, c) {
+  function plotterSections(p, sheet, c, detailed = false) {
     const margin = c.extra.plotterMargin;
     const iw = p.w + 2 * p.bleed;
     const ih = p.h + 2 * p.bleed;
@@ -1043,6 +1261,7 @@ const FLYER_DENSITIES = [
     const bottom = top + sheet.ph;
 
     let best = [];
+    let bestPlan = [];
     let bestCount = 0;
 
     for (const [sw, sh] of [[320, 450], [450, 320]]) {
@@ -1056,39 +1275,54 @@ const FLYER_DENSITIES = [
       for (const ox of [0, freeW / 2, freeW]) {
         for (const oy of [0, freeH / 2, freeH]) {
           const counts = [];
+          const plan = [];
 
           for (let y = 0; y < rows; y++) {
             for (let x = 0; x < cols; x++) {
               const sx = ox + x * sw;
               const sy = oy + y * sh;
+              const workX = Math.max(sx + margin, left);
+              const workY = Math.max(sy + margin, top);
 
               const w =
-                Math.min(sx + sw - margin, right) -
-                Math.max(sx + margin, left);
-
+                Math.min(sx + sw - margin, right) - workX;
               const h =
-                Math.min(sy + sh - margin, bottom) -
-                Math.max(sy + margin, top);
+                Math.min(sy + sh - margin, bottom) - workY;
 
               const count = fit(w, h, iw, ih);
-              if (count > 0) counts.push(count);
+              if (!count) continue;
+
+              counts.push(count);
+              plan.push({
+                sx, sy, sw, sh,
+                x: workX,
+                y: workY,
+                w, h, count
+              });
             }
           }
 
           const total = counts.reduce((a, b) => a + b, 0);
 
-          if (total > bestCount ||
-              (total === bestCount &&
-               counts.length &&
-               (!best.length || counts.length < best.length))) {
+          if (
+            total > bestCount ||
+            (
+              total === bestCount &&
+              counts.length &&
+              (!best.length || counts.length < best.length)
+            )
+          ) {
             best = counts;
+            bestPlan = plan;
             bestCount = total;
           }
         }
       }
     }
 
-    return best.sort((a, b) => b - a);
+    return detailed
+      ? bestPlan.sort((a, b) => b.count - a.count)
+      : best.sort((a, b) => b - a);
   }
 
   // ============================================================
@@ -1118,7 +1352,6 @@ const FLYER_DENSITIES = [
         )) {
           throw new Error("А3 с вылетами не помещается в печатную зону.");
         }
-
         capacity = 1;
       } else {
         if (!["E", "M"].includes(sheet.id)) {
@@ -1171,13 +1404,15 @@ const FLYER_DENSITIES = [
     ) {
       sections = plotterSections(p, sheet, c);
       capacity = sections.reduce((a, b) => a + b, 0);
-      baseSheets = Math.ceil(elements / capacity);
 
       if (!capacity) {
         throw new Error(
-          "Не помещается в секции плоттера 320×450 мм с учётом полей и вылетов."
+          "Не помещается в секции плоттера 320×450 мм " +
+          "с учётом полей и вылетов."
         );
       }
+
+      baseSheets = Math.ceil(elements / capacity);
     } else {
       const brochure = d.product === "broshyura";
 
@@ -1190,7 +1425,6 @@ const FLYER_DENSITIES = [
 
       if (capacity && brochure) {
         forms = Math.ceil(units / capacity);
-
         const last = units - (forms - 1) * capacity;
         const repeats = Math.max(1, Math.floor(capacity / last));
 
@@ -1207,13 +1441,8 @@ const FLYER_DENSITIES = [
     }
 
     return {
-      units,
-      elements,
-      capacity,
-      forms,
-      baseSheets,
-      sections,
-      warning
+      units, elements, capacity, forms,
+      baseSheets, sections, warning
     };
   }
 
@@ -1222,15 +1451,17 @@ const FLYER_DENSITIES = [
   // ============================================================
 
   function calculatePart(p, sheet, d, c) {
+    const flyerMaterialCost = d.product === "flyer"
+      ? flyerPaperCost(p, sheet, c)
+      : null;
+
     const l = layout(p, sheet, d, c);
     const r = c.rates;
     const e = c.extra;
-
     const printed = SIDES[p.color] > 0;
     const formCount = printed ? l.forms : 0;
     const isOffset = sheet.group === "offset";
 
-    // Цифра SRA3 и B2: отдельной платы за приладку печати НЕТ.
     let setupRate = printed && isOffset ? r.offsetSetup : 0;
 
     if (printed && isOffset && d.product === "bloknot") {
@@ -1245,11 +1476,9 @@ const FLYER_DENSITIES = [
     }
 
     if (
-      printed &&
-      isOffset &&
+      printed && isOffset &&
       d.product === "broshyura" &&
-      p.color === "4+4" &&
-      formCount >= 2
+      p.color === "4+4" && formCount >= 2
     ) {
       setupRate = c.policy[
         formCount === 2
@@ -1260,39 +1489,41 @@ const FLYER_DENSITIES = [
       ];
     }
 
-    // Технический запас бумаги/оттисков — отдельное правило.
-    let spoil = printed ? r[sheet.group + "Spoil"] * formCount : 0;
+    let spoil = printed
+      ? r[sheet.group + "Spoil"] * formCount
+      : 0;
 
     if (d.product === "paket" && p.role === "bag") {
       spoil = d.bag.extraSheets;
     }
 
     if (
-      sheet.id === "E" &&
-      printed &&
+      sheet.id === "E" && printed &&
       (["paket", "papka", "diecut"].includes(d.product) || p.diecut)
     ) {
       spoil += e.b2ExtraSheets * formCount;
     }
 
     const sheets = l.baseSheets + spoil;
-    if (!integer(sheets)) throw new Error("Некорректное количество листов.");
+    if (!integer(sheets)) {
+      throw new Error("Некорректное количество листов.");
+    }
 
-    const paperPerSheet = isSticker(d)
-      ? sheet.w * sheet.h / 1000000 *
-        (p.material === "film" ? e.stickerFilmM2 : e.stickerPaperM2)
-      : p.priceMode === "sheet"
-        ? p.priceSheet
-        : sheet.w * sheet.h / 1000000 *
-          p.density / 1000 * p.priceKg;
+    const paperPerSheet = flyerMaterialCost ?? (
+      isSticker(d)
+        ? sheet.w * sheet.h / 1000000 *
+          (p.material === "film" ? e.stickerFilmM2 : e.stickerPaperM2)
+        : p.priceMode === "sheet"
+          ? p.priceSheet
+          : sheet.w * sheet.h / 1000000 *
+            p.density / 1000 * p.priceKg
+    );
 
     const rows = {};
-
     rows.paper = sheets * paperPerSheet;
     rows.printRun = printed
       ? sheets * SIDES[p.color] * r[sheet.group + "Print"]
       : 0;
-
     rows.setup = formCount * setupRate;
 
     rows.cutting = p.cutting && d.product !== "stickerpack"
@@ -1326,7 +1557,6 @@ const FLYER_DENSITIES = [
       ? l.elements * r.emboss + r.embossSetup + p.plate
       : 0;
 
-    // Плоттер только по чистому тиражу, без запаса.
     let plotterSheets = 0;
 
     if (l.sections) {
@@ -1334,7 +1564,6 @@ const FLYER_DENSITIES = [
         Math.floor(l.elements / l.capacity) * l.sections.length;
 
       let rest = l.elements % l.capacity;
-
       for (const sectionCapacity of l.sections) {
         if (rest <= 0) break;
         plotterSheets++;
@@ -1350,18 +1579,22 @@ const FLYER_DENSITIES = [
     rows.plotter = plotterSheets * plotterRate;
 
     const total = Object.values(rows).reduce((a, b) => a + b, 0);
-    if (!validCost(total)) throw new Error("Некорректная стоимость компонента.");
+    if (!validCost(total)) {
+      throw new Error("Некорректная стоимость компонента.");
+    }
 
     return {
       ...l,
       id: p.id,
       name: p.name,
+      sheetId: sheet.id,
       method: sheet.label,
       sheets,
       spoil,
       formCount,
       setupCount: isOffset ? formCount : 0,
       setupRate,
+      paperPerSheet,
       plotterSheets,
       flyerPlotter,
       rows,
@@ -1375,7 +1608,6 @@ const FLYER_DENSITIES = [
 
   function calculateMethods(d, c) {
     const active = d.components.filter(p => p.enabled);
-
     const hybrid =
       d.product === "bloknot" &&
       c.hybrid &&
@@ -1396,10 +1628,7 @@ const FLYER_DENSITIES = [
             }
           });
 
-        cache.set(
-          p.id,
-          variants.sort((a, b) => a.total - b.total)[0]
-        );
+        cache.set(p.id, variants.sort((a, b) => a.total - b.total)[0]);
       }
     }
 
@@ -1412,7 +1641,6 @@ const FLYER_DENSITIES = [
 
     return sheets.map(sheet => {
       const id = allDigital ? "HYBRID" : sheet.id;
-
       const label = allDigital
         ? "Цифровые обложка и подложка"
         : hybrid
@@ -1436,13 +1664,11 @@ const FLYER_DENSITIES = [
           }
         });
 
-        // Минимум плоттера листовок — один раз на весь заказ.
         const plotterParts = parts.filter(p => p.flyerPlotter);
 
         if (plotterParts.length) {
           const plotterCost = plotterParts.reduce(
-            (sum, p) => sum + p.rows.plotter,
-            0
+            (sum, p) => sum + p.rows.plotter, 0
           );
 
           const surcharge = Math.max(
@@ -1458,7 +1684,6 @@ const FLYER_DENSITIES = [
 
         const assembly = d.quantity * d.assembly + d.assemblySetup;
         const accessories = d.quantity * d.accessories;
-
         const cost =
           parts.reduce((sum, p) => sum + p.total, 0) +
           assembly + accessories + d.extra;
@@ -1473,27 +1698,18 @@ const FLYER_DENSITIES = [
         }
 
         return {
-          id,
-          label,
-          valid: true,
-          parts,
-          assembly,
-          accessories,
+          id, label, valid: true,
+          parts, assembly, accessories,
           extra: d.extra,
-          cost,
-          price,
+          cost, price,
           unitPrice: price / d.quantity,
           profit: price - cost,
           hybrid,
-          warnings: [
-            ...new Set(parts.map(p => p.warning).filter(Boolean))
-          ]
+          warnings: [...new Set(parts.map(p => p.warning).filter(Boolean))]
         };
       } catch (error) {
         return {
-          id,
-          label,
-          valid: false,
+          id, label, valid: false,
           reason: error.message
         };
       }
@@ -1510,10 +1726,8 @@ const FLYER_DENSITIES = [
     const q = d.quantity;
     const area = u.w * u.h * q / 1000000;
     const rows = [];
-
     let total = 0;
     let info = "";
-
     const label = UV_TYPES.find(([id]) => id === u.type)[1];
 
     if (u.type === "adhesive") {
@@ -1540,7 +1754,6 @@ const FLYER_DENSITIES = [
       const printMinutes = u.white
         ? e.uvSheetPrintWhite
         : e.uvSheetPrint;
-
       const printing = q * printMinutes;
       const loading = q * e.uvSheetLoading;
 
@@ -1563,7 +1776,6 @@ const FLYER_DENSITIES = [
 
       const cycles = Math.ceil(q / capacity);
       const cycle = u.white ? e.uvCycleWhite : e.uvCycle;
-
       const full = Math.floor(q / capacity);
       const rest = q % capacity;
 
@@ -1591,7 +1803,6 @@ const FLYER_DENSITIES = [
         "Материал, изделия и оснастка не включены.";
     } else {
       const designer = u.type === "designer300";
-
       const rate = designer
         ? e[
           "uvDesigner" +
@@ -1619,7 +1830,9 @@ const FLYER_DENSITIES = [
     }
 
     const price = roundUp(total, 0);
-    if (!validCost(price)) throw new Error("Некорректная стоимость УФ-печати.");
+    if (!validCost(price)) {
+      throw new Error("Некорректная стоимость УФ-печати.");
+    }
 
     return {
       id: "UV",
@@ -1638,7 +1851,7 @@ const FLYER_DENSITIES = [
   }
 
   // ============================================================
-  // HTML-ЭЛЕМЕНТЫ ФОРМ
+  // HTML-ЭЛЕМЕНТЫ
   // ============================================================
 
   function input(label, path, value, options = {}) {
@@ -1711,6 +1924,49 @@ const FLYER_DENSITIES = [
     `;
   }
 
+  function tableRows(rows) {
+    return `
+      <div class="table-scroll">
+        <table><tbody>
+          ${rows.map(([label, value]) => `
+            <tr><td>${esc(label)}</td><td>${esc(value)}</td></tr>
+          `).join("")}
+        </tbody></table>
+      </div>
+    `;
+  }
+
+  function objectTable(obj) {
+    return tableRows(
+      Object.entries(obj).map(([key, value]) => [
+        RATE_NAMES[key] || key,
+        typeof value === "number" ? num(value) : String(value)
+      ])
+    );
+  }
+
+  function flyerDensityField(p, path, c) {
+    const densities = c.papers[p.paper]?.densities;
+
+    if (!Array.isArray(densities) || !densities.length) {
+      return input("Плотность, г/м²", path, p.density, { min: 1 });
+    }
+
+    const choices = densities.map(value => [value, String(value)]);
+
+    if (!densities.includes(p.density)) {
+      choices.unshift(["", "Выберите допустимую плотность"]);
+    }
+
+    return select(
+      "Плотность, г/м²",
+      path,
+      densities.includes(p.density) ? p.density : "",
+      choices,
+      { numeric: true }
+    );
+  }
+
   // ============================================================
   // НАВИГАЦИЯ
   // ============================================================
@@ -1721,7 +1977,6 @@ const FLYER_DENSITIES = [
     $("productNav").innerHTML = groups.map(group => `
       <div class="nav-group">
         <div class="nav-title">${esc(group)}</div>
-
         ${PRODUCTS.filter(p => p[2] === group).map(p => `
           <button
             class="nav-item ${order.product === p[0] ? "active" : ""}"
@@ -1768,17 +2023,14 @@ const FLYER_DENSITIES = [
         ${input("Название заказа", "name", o.name, {
           text: true, full: true
         })}
-
         ${input(
           o.product === "uvprint"
             ? "Количество изделий / листов"
             : "Тираж готовых изделий",
-          "quantity",
-          o.quantity,
+          "quantity", o.quantity,
           { min: 1, step: 1, full: true }
         )}
       </div>
-
       <div class="quick">
         ${(o.product === "uvprint"
           ? [1, 10, 50, 100, 500]
@@ -1796,14 +2048,10 @@ const FLYER_DENSITIES = [
     if (isBook(o)) {
       html += `
         <h3>Единый готовый формат</h3>
-
         ${quickFormat("book", o.bookFormat, [
-          ["A6", "А6"],
-          ["A5", "А5"],
-          ["A4", "А4"],
+          ["A6", "А6"], ["A5", "А5"], ["A4", "А4"],
           ["CUSTOM", "Свой размер"]
         ])}
-
         ${o.bookFormat === "CUSTOM" ? `
           <div class="fields">
             ${input("Ширина, мм", "customBook.w", o.customBook.w, { min: 1 })}
@@ -1815,9 +2063,7 @@ const FLYER_DENSITIES = [
 
     if (o.product === "wall") {
       html += quickFormat("wall", o.wall.format, [
-        ["A3", "А3"],
-        ["A2", "А2"],
-        ["custom", "Свой размер"]
+        ["A3", "А3"], ["A2", "А2"], ["custom", "Свой размер"]
       ]);
 
       if (o.wall.format === "custom") {
@@ -1836,53 +2082,37 @@ const FLYER_DENSITIES = [
 
       html += `
         <h3>Готовый пакет</h3>
-
         <div class="quick">
-          <button data-action="bag-preset" data-value="large">
-            30×40×12 см
-          </button>
-          <button data-action="bag-preset" data-value="small">
-            25×35×10 см
-          </button>
+          <button data-action="bag-preset" data-value="large">30×40×12 см</button>
+          <button data-action="bag-preset" data-value="small">25×35×10 см</button>
         </div>
-
         <div class="fields">
           ${input("Ширина A, мм", "bag.a", b.a, { min: 1 })}
           ${input("Высота B, мм", "bag.b", b.b, { min: 1 })}
           ${input("Глубина C, мм", "bag.c", b.c, { min: 2 })}
-
           ${select(
-            "Конструкция",
-            "bag.type",
-            rule?.type || b.type,
+            "Конструкция", "bag.type", rule?.type || b.type,
             [["half", "Две половинки"], ["full", "Цельная развёртка"]],
             { disabled: !!rule }
           )}
-
           ${pro ? input(
-            "Техзапас на заказ, листов",
-            "bag.extraSheets",
-            b.extraSheets,
+            "Техзапас на заказ, листов", "bag.extraSheets", b.extraSheets,
             { step: 1, full: true }
           ) : ""}
         </div>
-
         ${pro ? `
           <div class="checks">
             ${check(
               "Размещение на физическом листе подтверждено технологом",
-              "bag.confirmPhysical",
-              b.confirmPhysical
+              "bag.confirmPhysical", b.confirmPhysical
             )}
             ${check("Включить новый штамп", "bag.includeStamp", b.includeStamp)}
             ${check(
               "Внешний контур в оценке штампа",
-              "bag.outerContour",
-              b.outerContour
+              "bag.outerContour", b.outerContour
             )}
           </div>
         ` : ""}
-
         <div id="bagPreview"></div>
       `;
     }
@@ -1892,10 +2122,8 @@ const FLYER_DENSITIES = [
       const tier = q.size === "custom" ? q.tier : q.size;
 
       html += quickFormat("quarter", q.size, [
-        ["mini", "Мини"],
-        ["midi", "Миди"],
-        ["maxi", "Макси"],
-        ["custom", "Свой размер"]
+        ["mini", "Мини"], ["midi", "Миди"],
+        ["maxi", "Макси"], ["custom", "Свой размер"]
       ]);
 
       html += `
@@ -1906,11 +2134,9 @@ const FLYER_DENSITIES = [
             ${input("Высота шапки, мм", "calendar.customHeadH", q.customHeadH, { min: 1 })}
             ${input("Высота подложки, мм", "calendar.customBackingH", q.customBackingH, { min: 1 })}
           ` : ""}
-
           ${select(
             "Покупной комплект блоков",
-            "calendar.blockChoice",
-            q.blockChoice,
+            "calendar.blockChoice", q.blockChoice,
             ["economy", "standard", "premium"].map(key => {
               const b = cfg.polimat[tier][key];
               return [key, b.name + (pro ? " — " + money(b.price) : "")];
@@ -1918,7 +2144,6 @@ const FLYER_DENSITIES = [
             { full: true }
           )}
         </div>
-
         <div class="checks">
           ${check("Магнитный курсор", "calendar.magnet", q.magnet)}
         </div>
@@ -1929,17 +2154,11 @@ const FLYER_DENSITIES = [
       html += `
         <div class="fields">
           ${select(
-            "Размер календаря",
-            "three.size",
-            o.three.size,
-            [
-              ["mini", "Мини — основа А3"],
-              ["midi", "Миди — две основы на B2"]
-            ],
+            "Размер календаря", "three.size", o.three.size,
+            [["mini", "Мини — основа А3"], ["midi", "Миди — две основы на B2"]],
             { full: true }
           )}
         </div>
-
         <p class="small section-gap">
           Покупной блок и сборка добавляются на каждый календарь.
           Для миди печатное поле необходимо проверить.
@@ -1950,20 +2169,16 @@ const FLYER_DENSITIES = [
     if (o.product === "tent") {
       const purchased = o.tent.blockMode !== "printed";
       const e = cfg.extra;
-
-      const blockConfigured =
+      const configured =
         positive(e.tentPolimatW) &&
         positive(e.tentPolimatH) &&
         nonnegative(e.tentPolimatBlock);
 
       html += `
         <h3>Комплектация домика</h3>
-
         <div class="fields section-gap">
           ${select(
-            "Блок календаря",
-            "tent.blockMode",
-            o.tent.blockMode,
+            "Блок календаря", "tent.blockMode", o.tent.blockMode,
             [
               ["printed", "Собственные перекидные листы"],
               ["polimat", "Стандартный блок Полимат"],
@@ -1971,11 +2186,8 @@ const FLYER_DENSITIES = [
             ],
             { full: true }
           )}
-
           ${!purchased ? select(
-            "Формат перекидных листов",
-            "tent.format",
-            o.tent.format,
+            "Формат перекидных листов", "tent.format", o.tent.format,
             [
               ["A5", "А5 альбомный — 210×148 мм"],
               ["square", "Квадрат — 205×205 мм"],
@@ -1984,25 +2196,17 @@ const FLYER_DENSITIES = [
             { full: true }
           ) : ""}
         </div>
-
         <div class="checks">
           ${check("Кашированное основание", "tent.mounted", o.tent.mounted)}
         </div>
-
         ${purchased ? `
           <div class="notice section-gap">
-            ${blockConfigured
-              ? `
-                Один покупной блок:
+            ${configured
+              ? `Один покупной блок:
                 <strong>${num(e.tentPolimatW)}×${num(e.tentPolimatH)} мм</strong>,
-                <strong>${money(e.tentPolimatBlock)} за календарь</strong>.
-              `
-              : `
-                В тарифах не задан покупной блок домика.
-                Обновите prices.js или примените текущие тарифы.
-              `}
+                <strong>${money(e.tentPolimatBlock)} за календарь</strong>.`
+              : "В тарифах не задан покупной блок домика. Примените текущие тарифы."}
           </div>
-
           <p class="small">
             Печать покупного блока повторно не начисляется.
             ${o.tent.blockMode === "polimatCover"
@@ -2010,7 +2214,6 @@ const FLYER_DENSITIES = [
               : "Печатная верхняя обложка не включена."}
           </p>
         ` : ""}
-
         <p class="small section-gap">
           Формат относится к перекидным листам.
           Основание задаётся отдельно в развёртке.
@@ -2025,39 +2228,29 @@ const FLYER_DENSITIES = [
       html += `
         <div class="fields">
           ${select("Вид УФ-печати", "uv.type", u.type, UV_TYPES, { full: true })}
-
           ${!["pens", "timedSheet"].includes(u.type) ? `
             ${input("Ширина отпечатка / изделия, мм", "uv.w", u.w, { min: 1 })}
             ${input("Высота отпечатка / изделия, мм", "uv.h", u.h, { min: 1 })}
           ` : ""}
-
           ${u.type === "custom" ? select(
-            "Загрузка",
-            "uv.loading",
-            u.loading,
+            "Загрузка", "uv.loading", u.loading,
             [["items", "Отдельные изделия"], ["sheet", "Один лист за цикл"]],
             { full: true }
           ) : ""}
-
           ${u.type === "designer300" ? select(
-            "Цветность",
-            "uv.designerColor",
-            u.designerColor,
+            "Цветность", "uv.designerColor", u.designerColor,
             [["4+0", "4+0 — одна сторона"], ["4+4", "4+4 — две стороны"]],
             { full: true }
           ) : ""}
         </div>
-
         <div class="checks">
           ${!["pens", "pvc3"].includes(u.type)
             ? check("С белилами", "uv.white", u.white)
             : ""}
-
           ${u.type === "designer300"
             ? check("Софт-тач", "uv.softTouch", u.softTouch)
             : ""}
         </div>
-
         ${u.type === "timedSheet" ? `
           <p class="small section-gap">
             Фиксированный лист 500×700 мм, одна сторона.
@@ -2093,57 +2286,49 @@ const FLYER_DENSITIES = [
   }
 
   function renderFlyerPresets(p, index) {
-  if (order.product !== "flyer") return "";
+    if (order.product !== "flyer") return "";
 
-  return `
-    <div class="section-gap">
-      <h3>Стандартный размер</h3>
+    return `
+      <div class="section-gap">
+        <h3>Стандартный размер</h3>
+        <div class="quick">
+          ${FLYER_FORMATS.map(format => {
+            const active =
+              (p.w === format.w && p.h === format.h) ||
+              (p.w === format.h && p.h === format.w);
 
-      <div class="quick">
-        ${FLYER_FORMATS.map(format => {
-          const active =
-            (p.w === format.w && p.h === format.h) ||
-            (p.w === format.h && p.h === format.w);
-
-          return `
+            return `
+              <button
+                type="button"
+                data-action="flyer-size"
+                data-index="${index}"
+                data-value="${esc(format.id)}"
+                class="${active ? "active" : ""}"
+                aria-pressed="${active}"
+                title="${format.w}×${format.h} мм"
+              >${esc(format.label)}</button>
+            `;
+          }).join("")}
+        </div>
+        <h3>Плотность бумаги, г/м²</h3>
+        <div class="quick">
+          ${flyerDensities(p, cfg).map(density => `
             <button
               type="button"
-              data-action="flyer-size"
+              data-action="flyer-density"
               data-index="${index}"
-              data-value="${esc(format.id)}"
-              class="${active ? "active" : ""}"
-              aria-pressed="${active}"
-              title="${format.w}×${format.h} мм"
-            >
-              ${esc(format.label)}
-            </button>
-          `;
-        }).join("")}
+              data-value="${density}"
+              class="${p.density === density ? "active" : ""}"
+              aria-pressed="${p.density === density}"
+            >${density}</button>
+          `).join("")}
+        </div>
       </div>
+    `;
+  }
 
-      <h3>Плотность бумаги, г/м²</h3>
-
-      <div class="quick">
-        ${FLYER_DENSITIES.map(density => `
-          <button
-            type="button"
-            data-action="flyer-density"
-            data-index="${index}"
-            data-value="${density}"
-            class="${p.density === density ? "active" : ""}"
-            aria-pressed="${p.density === density}"
-          >
-            ${density}
-          </button>
-        `).join("")}
-      </div>
-    </div>
-  `;
-}
-  
   function renderComponents() {
     const advanced = advancedComponents();
-
     $("componentsCard").hidden = order.product === "uvprint";
     $("addComponent").hidden =
       !advanced || order.product === "threeinone";
@@ -2151,7 +2336,6 @@ const FLYER_DENSITIES = [
     if (order.product === "uvprint") return;
 
     let d;
-
     try {
       d = derive(order, cfg);
     } catch {
@@ -2169,10 +2353,8 @@ const FLYER_DENSITIES = [
     html += d.components.map((p, i) => {
       const original = order.components[i];
       const path = key => `components.${i}.${key}`;
-
       const core = d.product === "threeinone" ||
         (d.product === "paket" && p.role === "bag");
-
       const managed = managedTentComponent(order, p);
       const locked = lockedSize(order, p);
 
@@ -2181,11 +2363,27 @@ const FLYER_DENSITIES = [
         if (p.role === "cover" && order.tent.blockMode !== "polimatCover") return "";
       }
 
-      const paperChoices = Object.entries(cfg.papers).map(
-        ([key, value]) => [key, value.label]
-      );
+      const paperChoices = Object.entries(cfg.papers)
+        .filter(([key]) =>
+          order.product !== "flyer" || key !== "adhesiveFilm"
+        )
+        .map(([key, value]) => [key, value.label]);
 
-      const flyerPlotter = order.product === "flyer" && original.plotter;
+      const unavailableFilm =
+        order.product === "flyer" &&
+        p.paper === "adhesiveFilm";
+
+      if (unavailableFilm) {
+        paperChoices.unshift(["", "Выберите доступный материал"]);
+      }
+
+      const flyerPlotter =
+        order.product === "flyer" && original.plotter;
+      const fixedPrice =
+        order.product === "flyer" && flyerCatalogPrice(p);
+      const tariffText = order.product === "flyer"
+        ? flyerTariffText(p, cfg)
+        : "";
 
       return `
         <article class="component">
@@ -2203,7 +2401,6 @@ const FLYER_DENSITIES = [
             ` : `
               <h3>${esc(p.name)}${p.enabled ? "" : " · отключён"}</h3>
             `}
-
             ${advanced && !core && !managed ? `
               <button
                 class="text-button danger"
@@ -2213,7 +2410,7 @@ const FLYER_DENSITIES = [
             ` : ""}
           </div>
 
-                   ${p.enabled ? `
+          ${p.enabled ? `
             ${renderFlyerPresets(p, i)}
 
             <div class="fields">
@@ -2232,8 +2429,7 @@ const FLYER_DENSITIES = [
                 })
                 : !core
                   ? input("Элементов на изделие", path("units"), p.units, {
-                    min: 1,
-                    step: 1,
+                    min: 1, step: 1,
                     disabled: order.product === "tent" && p.role === "cover"
                   })
                   : ""}
@@ -2243,17 +2439,21 @@ const FLYER_DENSITIES = [
                   ["paper", "Бумажная самоклейка"],
                   ["film", "Самоклеящаяся плёнка"]
                 ])
-                : select("Бумага", path("paper"), p.paper, paperChoices)}
+                : select(
+                  "Бумага", path("paper"),
+                  unavailableFilm ? "" : p.paper,
+                  paperChoices
+                )}
 
               ${!isSticker(d)
-                ? input("Плотность, г/м²", path("density"), p.density, { min: 1 })
+                ? d.product === "flyer"
+                  ? flyerDensityField(p, path("density"), cfg)
+                  : input("Плотность, г/м²", path("density"), p.density, { min: 1 })
                 : ""}
 
               ${!isSticker(d)
                 ? select(
-                  "Цветность",
-                  path("color"),
-                  p.color,
+                  "Цветность", path("color"), p.color,
                   p.mode === "pages"
                     ? COLORS.filter(([id]) => ["1+1", "4+4"].includes(id))
                     : COLORS
@@ -2268,14 +2468,18 @@ const FLYER_DENSITIES = [
 
               ${p.lamination !== "none"
                 ? select(
-                  "Сторон ламинации",
-                  path("lamSides"),
-                  p.lamSides,
+                  "Сторон ламинации", path("lamSides"), p.lamSides,
                   [[1, "Одна сторона"], [2, "Две стороны · 1+1"]],
                   { numeric: true }
                 )
                 : ""}
             </div>
+
+            ${tariffText ? `
+              <div class="notice section-gap">
+                ${esc(tariffText)}
+              </div>
+            ` : ""}
 
             <div class="checks">
               ${check("Биговка", path("score"), p.score)}
@@ -2283,25 +2487,17 @@ const FLYER_DENSITIES = [
               ${check("УФ-лак", path("uv"), p.uv)}
               ${check("Тиснение", path("emboss"), p.emboss)}
 
-              ${advanced
-                ? check(
-                  "Резка",
-                  path("cutting"),
-                  flyerPlotter ? false : p.cutting,
-                  d.product === "stickerpack" || flyerPlotter
-                )
-                : ""}
+              ${advanced ? check(
+                "Резка", path("cutting"),
+                flyerPlotter ? false : p.cutting,
+                d.product === "stickerpack" || flyerPlotter
+              ) : ""}
 
-              ${advanced
-                ? check(
-                  "Вырубка",
-                  path("diecut"),
-                  p.diecut,
-                  d.product === "paket" &&
-                    order.bag.includeStamp &&
-                    p.role === "bag"
-                )
-                : ""}
+              ${advanced ? check(
+                "Вырубка", path("diecut"), p.diecut,
+                d.product === "paket" &&
+                order.bag.includeStamp && p.role === "bag"
+              ) : ""}
 
               ${d.product === "flyer"
                 ? check("Плоттерная резка", path("plotter"), original.plotter)
@@ -2314,13 +2510,11 @@ const FLYER_DENSITIES = [
                   ? money(cfg.extra.flyerPlotterSheet)
                   : "Тариф не задан"}
                 за секцию 320×450 мм.
-
                 Минимум:
                 ${nonnegative(cfg.extra.flyerPlotterMinimum)
                   ? money(cfg.extra.flyerPlotterMinimum)
                   : "не задан"}
                 на весь заказ до общей наценки.
-
                 Запас не отправляется на плоттер.
                 Обычная резка этого компонента не начисляется.
               </p>
@@ -2337,7 +2531,6 @@ const FLYER_DENSITIES = [
             ${advanced ? `
               <details id="component-tech-${i}">
                 <summary>Технология и параметры компонента</summary>
-
                 <div class="fields">
                   ${input("Название", path("name"), original.name, {
                     text: true, full: true, disabled: core
@@ -2359,21 +2552,32 @@ const FLYER_DENSITIES = [
                   ], { disabled: core || managed })}
 
                   ${!isSticker(d) ? `
-                    ${select("Цена бумаги", path("priceMode"), p.priceMode, [
-                      ["kg", "За килограмм"],
-                      ["sheet", "За печатный лист"]
-                    ])}
+                    ${select(
+                      "Цена бумаги", path("priceMode"), p.priceMode,
+                      [["kg", "За килограмм"], ["sheet", "За печатный лист"]],
+                      { disabled: fixedPrice }
+                    )}
 
-                    ${p.priceMode === "kg"
-                      ? input("Бумага, ₽/кг", path("priceKg"), p.priceKg)
-                      : input("Бумага, ₽/лист", path("priceSheet"), p.priceSheet)}
+                    ${fixedPrice && p.paper === "adhesive"
+                      ? `<p class="small full">${esc(tariffText)}</p>`
+                      : p.priceMode === "kg"
+                        ? input(
+                          "Бумага, ₽/кг", path("priceKg"), p.priceKg,
+                          { disabled: fixedPrice }
+                        )
+                        : input(
+                          p.paper === "designer" && fixedPrice
+                            ? "Бумага, ₽/лист SRA3"
+                            : "Бумага, ₽/лист",
+                          path("priceSheet"), p.priceSheet,
+                          { disabled: fixedPrice }
+                        )}
                   ` : ""}
 
                   ${input("Вылет с каждой стороны, мм", path("bleed"), p.bleed)}
 
                   ${input("Комплектов форм / макетов", path("setups"), p.setups, {
-                    min: 1,
-                    step: 1,
+                    min: 1, step: 1,
                     disabled: d.product === "broshyura"
                   })}
 
@@ -2381,7 +2585,6 @@ const FLYER_DENSITIES = [
                     ${input("Изделий на штампе", path("perStamp"), p.perStamp, {
                       min: 1, step: 1
                     })}
-
                     ${input("Стоимость штампа, ₽", path("stamp"), p.stamp, {
                       disabled: d.product === "paket" &&
                         order.bag.includeStamp && p.role === "bag"
@@ -2392,11 +2595,12 @@ const FLYER_DENSITIES = [
                     ? input("Стоимость клише, ₽", path("plate"), p.plate)
                     : ""}
                 </div>
-
                 <p class="small section-gap">
                   Цифра SRA3 и B2: приладка печати не оплачивается.
-                  Число форм влияет на заданный технологический запас.
-                  Правки стоимости действуют только в текущем заказе.
+                  Число форм влияет на технологический запас.
+                  ${fixedPrice
+                    ? "Цена выбранного материала берётся из prices.js."
+                    : "Ручные правки стоимости действуют только в текущем заказе."}
                 </p>
               </details>
             ` : ""}
@@ -2410,14 +2614,10 @@ const FLYER_DENSITIES = [
 
   function renderAssembly() {
     const accessible = pro || order.product === "flyer";
-
-    $("assemblyCard").hidden =
-      !accessible || order.product === "uvprint";
-
+    $("assemblyCard").hidden = !accessible || order.product === "uvprint";
     if (!accessible || order.product === "uvprint") return;
 
     let d;
-
     try {
       d = derive(order, cfg);
     } catch {
@@ -2425,8 +2625,7 @@ const FLYER_DENSITIES = [
     }
 
     const automatic = [
-      "bloknot", "broshyura", "quarter",
-      "threeinone", "tent", "wall"
+      "bloknot", "broshyura", "quarter", "threeinone", "tent", "wall"
     ].includes(order.product);
 
     $("assembly").innerHTML = `
@@ -2434,30 +2633,18 @@ const FLYER_DENSITIES = [
         ${input("Сборка, ₽/изделие", "assembly", d.assembly, {
           disabled: automatic
         })}
-
         ${input("Настройка сборки, ₽/заказ", "assemblySetup", order.assemblySetup)}
-
         ${input(
-          "Базовые комплектующие, ₽/изделие",
-          "accessories",
+          "Базовые комплектующие, ₽/изделие", "accessories",
           order.product === "quarter" ? d.accessories : order.accessories,
           { disabled: order.product === "quarter" }
         )}
-
         ${input("Прочие расходы, ₽/заказ", "extra", order.extra)}
-
         ${input(
-          "Примечание к комплектующим",
-          "accessoriesNote",
-          order.accessoriesNote,
-          {
-            text: true,
-            full: true,
-            disabled: order.product === "quarter"
-          }
+          "Примечание к комплектующим", "accessoriesNote", order.accessoriesNote,
+          { text: true, full: true, disabled: order.product === "quarter" }
         )}
       </div>
-
       <p class="small section-gap">
         Автоматическая сборка берётся из prices.js.
         Покупные блоки 3 в 1 и домика добавляются отдельно.
@@ -2484,8 +2671,7 @@ const FLYER_DENSITIES = [
           : 'role="img" aria-label="Предварительная развёртка пакета"'}
       >
         <rect
-          x="0" y="0"
-          width="${g.width}" height="${g.height}"
+          x="0" y="0" width="${g.width}" height="${g.height}"
           fill="none" stroke="#b3bacb" stroke-width=".7"
         />
         ${lines.map(line => `
@@ -2504,7 +2690,6 @@ const FLYER_DENSITIES = [
     if (!root) return;
 
     const svg = bagSVG(order.bag);
-
     if (!svg) {
       root.textContent = "Укажите размеры пакета.";
       return;
@@ -2515,27 +2700,16 @@ const FLYER_DENSITIES = [
 
     root.innerHTML = `
       <div class="actions">
-        <strong>
-          ${num(g.width)}×${num(g.height)} мм · ${g.parts} ч.
-        </strong>
-        <button class="button compact" data-action="bag-svg">
-          Скачать SVG
-        </button>
+        <strong>${num(g.width)}×${num(g.height)} мм · ${g.parts} ч.</strong>
+        <button class="button compact" data-action="bag-svg">Скачать SVG</button>
       </div>
-
       ${svg}
-
-      <p class="small">
-        Предварительная схема, не производственный чертёж штампа.
-      </p>
-
+      <p class="small">Предварительная схема, не производственный чертёж штампа.</p>
       ${pro ? `
         <p class="small">
           Линии: ${num(estimate.meters)} пог. м.
           Оценка штампа: ${money(estimate.cost)}.
-          ${order.bag.includeStamp
-            ? "Включён."
-            : "Не включён автоматически."}
+          ${order.bag.includeStamp ? "Включён." : "Не включён автоматически."}
         </p>
       ` : ""}
     `;
@@ -2548,7 +2722,6 @@ const FLYER_DENSITIES = [
   function describe(d, result, c = cfg) {
     if (d.product === "uvprint") {
       const u = d.uv;
-
       return [
         UV_TYPES.find(([id]) => id === u.type)?.[1] || "УФ-печать",
         u.type === "timedSheet"
@@ -2568,44 +2741,38 @@ const FLYER_DENSITIES = [
     const lines = [];
 
     if (d.product === "paket") {
-      lines.push(
-        `Готовый пакет: ${d.bag.a}×${d.bag.b}×${d.bag.c} мм.`
-      );
+      lines.push(`Готовый пакет: ${d.bag.a}×${d.bag.b}×${d.bag.c} мм.`);
       if (d.bag.includeStamp) lines.push("Новый штамп включён.");
     }
 
     for (const p of d.components.filter(item => item.enabled)) {
       const operations = [];
-
       if (p.cutting) operations.push("резка");
-
       if (p.lamination !== "none") {
         operations.push(
           (p.lamination === "soft" ? "софт-тач" : "ламинация") +
           `, сторон: ${p.lamSides}`
         );
       }
-
       if (p.score) operations.push("биговка");
       if (p.folding) operations.push("фальцовка");
       if (p.diecut) operations.push("вырубка");
       if (p.uv) operations.push("УФ-лак");
       if (p.emboss) operations.push("тиснение");
 
-      if (d.product === "stickerpack" ||
-          (d.product === "flyer" && p.plotter)) {
+      if (
+        d.product === "stickerpack" ||
+        (d.product === "flyer" && p.plotter)
+      ) {
         operations.push("плоттерная резка");
       }
 
       lines.push(
         `${p.name}: ${num(p.w)}×${num(p.h)} мм; ` +
-        (p.mode === "pages"
-          ? `${p.pages} полос`
-          : `${p.units} эл./изд.`) +
+        (p.mode === "pages" ? `${p.pages} полос` : `${p.units} эл./изд.`) +
         `; ${c.papers[p.paper]?.label || p.paper}, ${p.density} г/м²; ` +
         (p.color === "none" ? "без печати" : p.color) +
-        (operations.length ? "; " + operations.join(", ") : "") +
-        "."
+        (operations.length ? "; " + operations.join(", ") : "") + "."
       );
     }
 
@@ -2615,7 +2782,6 @@ const FLYER_DENSITIES = [
 
     if (d.product === "tent" && d.tent.blockMode !== "printed") {
       lines.push("На календарь включён один готовый покупной блок Полимат.");
-
       if (d.tent.blockMode === "polimatCover") {
         lines.push("Печать отдельной верхней обложки включена.");
       }
@@ -2623,13 +2789,12 @@ const FLYER_DENSITIES = [
 
     if (d.product === "flyer") {
       const plotterParts = (result?.parts || []).filter(p => p.flyerPlotter);
-
       if (plotterParts.length) {
-        const count = plotterParts.reduce(
-          (sum, p) => sum + p.plotterSheets,
-          0
+        lines.push(
+          "Плоттер: " +
+          num(plotterParts.reduce((sum, p) => sum + p.plotterSheets, 0)) +
+          " секций 320×450 мм."
         );
-        lines.push("Плоттер: " + num(count) + " секций 320×450 мм.");
       }
     }
 
@@ -2640,10 +2805,7 @@ const FLYER_DENSITIES = [
       });
     }
 
-    (result?.warnings || []).forEach(warning => {
-      lines.push("Важно: " + warning);
-    });
-
+    (result?.warnings || []).forEach(w => lines.push("Важно: " + w));
     return lines.join("\n");
   }
 
@@ -2662,17 +2824,13 @@ const FLYER_DENSITIES = [
       <div class="result-main">
         <div class="result-top">
           <h2>Ваш расчёт</h2>
-          <span class="badge">
-            ${archived ? "Архивные тарифы" : "Предварительно"}
-          </span>
+          <span class="badge">${archived ? "Архивные тарифы" : "Предварительно"}</span>
         </div>
 
         <div class="price-label">Стоимость заказа</div>
         <div class="price">${money(result.price)}</div>
-
         <div class="unit-price">
-          ${money(result.unitPrice)} за единицу ·
-          ${num(order.quantity)} шт.
+          ${money(result.unitPrice)} за единицу · ${num(order.quantity)} шт.
         </div>
 
         <div class="divider"></div>
@@ -2680,24 +2838,19 @@ const FLYER_DENSITIES = [
 
         <dl class="spec-list">
           <div class="spec-row">
-            <dt>Изделие</dt>
-            <dd>${esc(product(order.product)[1])}</dd>
+            <dt>Изделие</dt><dd>${esc(product(order.product)[1])}</dd>
           </div>
           <div class="spec-row">
-            <dt>Тираж</dt>
-            <dd>${num(order.quantity)} шт.</dd>
+            <dt>Тираж</dt><dd>${num(order.quantity)} шт.</dd>
           </div>
           <div class="spec-row">
-            <dt>Тарифы</dt>
-            <dd>${esc(cfg.meta.version)}</dd>
+            <dt>Тарифы</dt><dd>${esc(cfg.meta.version)}</dd>
           </div>
         </dl>
 
         <details class="section-gap" id="result-spec">
           <summary class="small">Полный состав заказа</summary>
-          <div class="result-description section-gap">
-            ${esc(describe(derived, result))}
-          </div>
+          <div class="result-description section-gap">${esc(describe(derived, result))}</div>
         </details>
 
         ${order.note ? `
@@ -2715,27 +2868,25 @@ const FLYER_DENSITIES = [
           </small>
         </div>
 
-        ${result.warnings.map(warning => `
-          <div class="notice warning section-gap">${esc(warning)}</div>
+        ${result.warnings.map(w => `
+          <div class="notice warning section-gap">${esc(w)}</div>
         `).join("")}
 
         ${result.uv ? `
-          <div class="table-scroll section-gap">
-            <table>
-              <tbody>
-                ${result.rows.map(([label, value]) => `
-                  <tr><td>${esc(label)}</td><td>${esc(value)}</td></tr>
-                `).join("")}
-              </tbody>
-            </table>
-            <p class="small section-gap">${esc(result.info)}</p>
-          </div>
+          <div class="section-gap">${tableRows(result.rows)}</div>
+          <p class="small section-gap">${esc(result.info)}</p>
         ` : ""}
 
         <div class="result-actions">
-          <button class="button primary" data-action="save">
-            Сохранить расчёт
-          </button>
+          ${order.product === "flyer" ? `
+            <button
+              class="button"
+              data-action="flyer-layout"
+              style="margin-bottom:10px"
+            >▦ Размещение на листе</button>
+          ` : ""}
+
+          <button class="button primary" data-action="save">Сохранить расчёт</button>
           <div class="secondary-actions">
             <button class="button" data-action="copy">Копировать</button>
             <button class="button" data-action="print">Печать</button>
@@ -2765,12 +2916,10 @@ const FLYER_DENSITIES = [
           <summary>Экономика заказа</summary>
           <div class="foldout-body">
             <div class="cost-row">
-              <span>Себестоимость</span>
-              <strong>${money(result.cost)}</strong>
+              <span>Себестоимость</span><strong>${money(result.cost)}</strong>
             </div>
             <div class="cost-row profit">
-              <span>Прибыль</span>
-              <strong>${money(result.profit)}</strong>
+              <span>Прибыль</span><strong>${money(result.profit)}</strong>
             </div>
             <p class="small">До налогов и неучтённых накладных расходов.</p>
           </div>
@@ -2778,23 +2927,16 @@ const FLYER_DENSITIES = [
 
         <details class="foldout section-gap" id="methods">
           <summary>Сравнить технологии</summary>
-
           <div class="foldout-body">
             <button class="button compact" data-action="method-auto">
               Автоматический выбор
             </button>
-
             <div class="table-scroll section-gap">
               <table>
-                <thead>
-                  <tr><th>Вариант</th><th>Цена</th><th></th></tr>
-                </thead>
+                <thead><tr><th>Вариант</th><th>Цена</th><th></th></tr></thead>
                 <tbody>
                   ${methods.map(m => m.valid ? `
-                    <tr class="
-                      ${m.id === best.id ? "best" : ""}
-                      ${m.id === result.id ? "selected" : ""}
-                    ">
+                    <tr class="${m.id === best.id ? "best" : ""} ${m.id === result.id ? "selected" : ""}">
                       <td>
                         ${m.id === best.id ? "★ " : ""}${esc(m.label)}
                         <div class="small">Затраты: ${money(m.cost)}</div>
@@ -2822,16 +2964,15 @@ const FLYER_DENSITIES = [
 
         <details class="foldout section-gap" id="cost-details">
           <summary>Бумага, печать и операции</summary>
-
           <div class="foldout-body">
             ${result.parts.map(p => `
               <div class="detail-block">
                 <h3>${esc(p.name)}</h3>
-
                 <p class="small">
                   ${esc(p.method)}.
                   Вместимость: ${num(p.capacity)}.
                   Листов: ${num(p.baseSheets)} + ${num(p.spoil)} запас.
+                  Бумага: ${money(p.paperPerSheet)}/лист.
                   Форм: ${num(p.formCount)}.
                   ${p.setupCount
                     ? `Приладки: ${num(p.setupCount)} по ${money(p.setupRate)}.`
@@ -2840,7 +2981,6 @@ const FLYER_DENSITIES = [
                     ? "Секций плоттера: " + num(p.plotterSheets) + "."
                     : ""}
                 </p>
-
                 ${Object.entries(p.rows)
                   .filter(([, value]) => value !== 0)
                   .map(([key, value]) => `
@@ -2851,7 +2991,6 @@ const FLYER_DENSITIES = [
                   `).join("")}
               </div>
             `).join("")}
-
             <div class="detail-block">
               <div class="cost-row">
                 <span>Сборка</span><strong>${money(result.assembly)}</strong>
@@ -2879,13 +3018,11 @@ const FLYER_DENSITIES = [
 
   function recalculate() {
     clearTimeout(timer);
-
     chosen = null;
     methods = [];
 
     try {
       derived = derive(order, cfg);
-
       const errors = validateOrder(derived, cfg);
       if (errors.length) throw new Error(errors.join("\n"));
 
@@ -2915,7 +3052,6 @@ const FLYER_DENSITIES = [
       renderResult(chosen, best);
     } catch (error) {
       console.warn(error);
-
       $("results").innerHTML = `
         <div class="error">
           <h3>Уточните параметры</h3>
@@ -2924,7 +3060,6 @@ const FLYER_DENSITIES = [
           `).join("")}
         </div>
       `;
-
       $("professionalResults").innerHTML = "";
       $("mobilePrice").textContent = "—";
       $("mobileUnit").textContent = "Расчёт недоступен";
@@ -2935,26 +3070,20 @@ const FLYER_DENSITIES = [
 
   function renderAll() {
     clearTimeout(timer);
-
     const opened = new Set([
       ...document.querySelectorAll("details[open][id]")
     ].map(node => node.id));
 
     const p = product(order.product);
-
     $("productTitle").textContent = p[1];
     $("productGroup").textContent = p[2];
     $("productHint").textContent = p[4];
 
     $("proButton").classList.toggle("active", pro);
     $("proButton").setAttribute("aria-pressed", String(pro));
-    $("proButton").textContent = pro
-      ? "Закрыть проф. режим"
-      : "Проф. режим";
-
+    $("proButton").textContent = pro ? "Закрыть проф. режим" : "Проф. режим";
     $("sidebarVersion").textContent = "Тарифы " + current.meta.version;
     $("footerVersion").textContent = "Тарифы расчёта: " + cfg.meta.version;
-
     $("demoBanner").hidden = !cfg.meta.demo;
     $("archiveBanner").hidden = !archived;
 
@@ -2962,9 +3091,7 @@ const FLYER_DENSITIES = [
       $("archiveBanner").innerHTML = `
         Открыты архивные тарифы ${esc(cfg.meta.version)}.
         Сохранённый документ остаётся неизменным.
-        Рабочий пересчёт использует текущую версию формул:
-        приладки цифровой печати исключены.
-
+        Рабочая копия рассчитывается по текущим формулам и ограничениям.
         <div class="actions">
           <button class="button compact" data-action="use-current">
             Пересчитать по текущим тарифам
@@ -2992,13 +3119,11 @@ const FLYER_DENSITIES = [
       return;
     }
 
-    if (reset &&
-        !confirm("Сбросить параметры к текущему справочнику тарифов?")) {
+    if (reset && !confirm("Сбросить параметры к текущему справочнику тарифов?")) {
       return;
     }
 
     const previousQuantity = order?.quantity;
-
     cfg = clone(current);
     archived = false;
     order = baseOrder(id, cfg);
@@ -3017,27 +3142,23 @@ const FLYER_DENSITIES = [
 
   function repriceOrder(source) {
     const o = normalizeOrder(clone(source), current, false);
-
-    const sourceDefaults = current.products[o.product] ||
+    const defaults = current.products[o.product] ||
       (o.product === "diecut" ? current.products.flyer : null);
 
-    if (!sourceDefaults) throw new Error("Нет текущих настроек изделия.");
+    if (!defaults) throw new Error("Нет текущих настроек изделия.");
 
     for (const key of [
       "assembly", "assemblySetup", "accessories", "extra", "accessoriesNote"
     ]) {
-      o[key] = sourceDefaults[key];
+      o[key] = defaults[key];
     }
 
     o.components = o.components.map((p, index) => {
-      const specs = sourceDefaults.components;
-
+      const specs = defaults.components;
       let base = specs[index];
 
       if (!base || (base.role || "other") !== p.role) {
-        const sameRole = specs.filter(
-          s => (s.role || "other") === p.role
-        );
+        const sameRole = specs.filter(s => (s.role || "other") === p.role);
         base = sameRole.length === 1 ? sameRole[0] : null;
       }
 
@@ -3157,7 +3278,14 @@ const FLYER_DENSITIES = [
       throw new Error("Повреждено название или примечание.");
     }
 
-    const errors = validateOrder(derive(o, s.config), s.config);
+    // Новые ограничения листовок не должны блокировать чтение
+    // всей базы старых документов. Они проверяются при пересчёте.
+    const errors = validateOrder(
+      derive(o, s.config),
+      s.config,
+      { snapshot: true }
+    );
+
     if (errors.length) throw new Error(errors[0]);
 
     return {
@@ -3168,8 +3296,10 @@ const FLYER_DENSITIES = [
   }
 
   function readDatabase(raw) {
-    if (raw?.app !== "print-studio" ||
-        raw.version !== DATABASE_VERSION) {
+    if (
+      raw?.app !== "print-studio" ||
+      raw.version !== DATABASE_VERSION
+    ) {
       throw new Error(
         "Неверный формат резервной копии. Старый формат версии 6 не поддерживается."
       );
@@ -3185,7 +3315,6 @@ const FLYER_DENSITIES = [
     }
 
     const used = new Set();
-
     const restoreId = value => {
       let id = typeof value === "string" && value ? value : uid();
       if (used.has(id)) id = uid();
@@ -3241,7 +3370,6 @@ const FLYER_DENSITIES = [
     try {
       const text = localStorage.getItem(STORAGE_KEY);
       if (!text) return;
-
       const db = readDatabase(JSON.parse(text));
       saved = db.saved;
       templates = db.templates;
@@ -3254,7 +3382,6 @@ const FLYER_DENSITIES = [
 
   function saveResult() {
     recalculate();
-
     if (!chosen) return toast("Сначала исправьте параметры.");
     if (saved.length >= 2000) return toast("Предел: 2000 расчётов.");
 
@@ -3277,7 +3404,6 @@ const FLYER_DENSITIES = [
 
   function saveTemplate() {
     recalculate();
-
     if (!chosen) return toast("Сначала исправьте параметры.");
 
     if (order.product === "diecut") {
@@ -3295,11 +3421,7 @@ const FLYER_DENSITIES = [
       existing.snapshot = snapshot();
     } else {
       if (templates.length >= 1000) return toast("Предел: 1000 шаблонов.");
-      templates.push({
-        id: uid(),
-        name,
-        snapshot: snapshot()
-      });
+      templates.push({ id: uid(), name, snapshot: snapshot() });
     }
 
     if (persist()) {
@@ -3312,7 +3434,6 @@ const FLYER_DENSITIES = [
     if (!item) return;
 
     const s = checkSnapshot(item.snapshot);
-
     order = s.order;
     cfg = s.config;
     selectedMethod = s.method;
@@ -3320,12 +3441,10 @@ const FLYER_DENSITIES = [
 
     closeDialog();
     renderAll();
-
     window.scrollTo({ top: 0, behavior: "smooth" });
-
     toast(
       "Открыта рабочая копия. Сохранённый документ не изменён; " +
-      "пересчёт использует обновлённые формулы."
+      "пересчёт использует текущие формулы и ограничения."
     );
   }
 
@@ -3337,19 +3456,19 @@ const FLYER_DENSITIES = [
       return toast("Этот вид изделия удалён из каталога.");
     }
 
-    order = repriceOrder(checkSnapshot(item.snapshot).order);
+    const next = repriceOrder(checkSnapshot(item.snapshot).order);
+    order = next;
     cfg = clone(current);
     archived = false;
     selectedMethod = null;
 
     closeDialog();
     renderAll();
-
-    toast("Шаблон открыт с текущими ценами. Проверьте нестандартные расходы.");
+    toast("Шаблон открыт с текущими ценами. Проверьте параметры и расходы.");
   }
 
   // ============================================================
-  // ДИАЛОГИ И ПАРОЛЬ
+  // ДИАЛОГИ
   // ============================================================
 
   function openDialog(title, html, view) {
@@ -3363,6 +3482,7 @@ const FLYER_DENSITIES = [
   function closeDialog() {
     $("managerDialog").close();
     dialogView = "";
+    previewState = null;
   }
 
   function openProfessionalLogin() {
@@ -3380,26 +3500,14 @@ const FLYER_DENSITIES = [
               required
             >
           </label>
-
           <p class="small section-gap">
             Доступ к экономике заказа и служебным параметрам.
             Это ограничение интерфейса, не серверная авторизация.
           </p>
-
-          <p
-            id="professionalLoginError"
-            class="danger section-gap"
-            role="alert"
-          ></p>
-
+          <p id="professionalLoginError" class="danger section-gap" role="alert"></p>
           <div class="actions section-gap">
             <button class="button primary" type="submit">Открыть</button>
-
-            <button
-              class="button"
-              type="button"
-              data-action="dialog-close"
-            >Отмена</button>
+            <button class="button" type="button" data-action="dialog-close">Отмена</button>
           </div>
         </form>
       `,
@@ -3419,17 +3527,13 @@ const FLYER_DENSITIES = [
           </button>
           <button class="button compact" data-action="export">Экспорт</button>
           <button class="button compact" data-action="import">Импорт</button>
-          <button class="button compact danger" data-action="saved-clear">
-            Удалить все
-          </button>
+          <button class="button compact danger" data-action="saved-clear">Удалить все</button>
         </div>
-
         <p class="small section-gap">
           Здесь показаны цены сохранённых документов.
           Открытие создаёт рабочую копию с текущими формулами
           и архивными тарифами.
         </p>
-
         ${saved.length ? saved.map(item => {
           const date = new Date(item.created);
           const dateLabel = Number.isNaN(date.getTime())
@@ -3449,50 +3553,31 @@ const FLYER_DENSITIES = [
                 </label>
                 <span class="saved-price">${money(item.price)}</span>
               </div>
-
               <p class="small">
-                ${esc(dateLabel)} ·
-                ${num(item.quantity)} шт. ·
+                ${esc(dateLabel)} · ${num(item.quantity)} шт. ·
                 тарифы ${esc(item.snapshot.config.meta.version)}
               </p>
-
               <details class="section-gap">
                 <summary class="small">Состав заказа</summary>
                 <div class="saved-description">${esc(item.description)}</div>
               </details>
-
               ${pro && item.cost !== null ? `
                 <p class="small section-gap">
                   Себестоимость: ${money(item.cost)}.
                   Прибыль: ${money(item.price - item.cost)}.
                 </p>
               ` : ""}
-
               <div class="actions">
-                <button
-                  class="button compact"
-                  data-action="saved-load"
-                  data-id="${esc(item.id)}"
-                >Открыть копию</button>
-
-                <button
-                  class="button compact"
-                  data-action="saved-item-copy"
-                  data-id="${esc(item.id)}"
-                >Копировать документ</button>
-
-                <button
-                  class="button compact danger"
-                  data-action="saved-delete"
-                  data-id="${esc(item.id)}"
-                >Удалить</button>
+                <button class="button compact" data-action="saved-load"
+                  data-id="${esc(item.id)}">Открыть копию</button>
+                <button class="button compact" data-action="saved-item-copy"
+                  data-id="${esc(item.id)}">Копировать документ</button>
+                <button class="button compact danger" data-action="saved-delete"
+                  data-id="${esc(item.id)}">Удалить</button>
               </div>
             </article>
           `;
-        }).join("") : `
-          <div class="empty">Пока нет сохранённых расчётов.</div>
-        `}
-
+        }).join("") : `<div class="empty">Пока нет сохранённых расчётов.</div>`}
         <div id="savedSum" class="sticky-sum" hidden></div>
       `,
       "saved"
@@ -3530,86 +3615,27 @@ const FLYER_DENSITIES = [
           Сохраняют состав и параметры изделия.
           При открытии стоимостные поля заменяются текущими базовыми ценами.
         </p>
-
         <div class="actions section-gap">
           <button class="button compact" data-action="template-save">
             Сохранить текущий заказ
           </button>
         </div>
-
         ${templates.length ? templates.map(t => `
           <div class="saved-item">
             <strong>${esc(t.name)}</strong>
             <div class="actions">
-              <button
-                class="button compact"
-                data-action="template-load"
+              <button class="button compact" data-action="template-load"
                 data-id="${esc(t.id)}"
                 ${t.snapshot.order.product === "diecut" ? "disabled" : ""}
               >Применить</button>
-
-              <button
-                class="button compact danger"
-                data-action="template-delete"
-                data-id="${esc(t.id)}"
-              >Удалить</button>
+              <button class="button compact danger" data-action="template-delete"
+                data-id="${esc(t.id)}">Удалить</button>
             </div>
           </div>
-        `).join("") : `
-          <div class="empty">Шаблонов пока нет.</div>
-        `}
+        `).join("") : `<div class="empty">Шаблонов пока нет.</div>`}
       `,
       "templates"
     );
-  }
-
-  const RATE_NAMES = {
-    digitalPrint: "SRA3, ₽/лист/сторона",
-    b2Print: "B2, ₽/лист/сторона",
-    offsetPrint: "Офсет, ₽/лист/сторона",
-    digitalSetup: "Приладка SRA3 — не применяется",
-    b2Setup: "Приладка B2 — не применяется",
-    offsetSetup: "Приладка офсета, ₽",
-    digitalSpoil: "Запас SRA3, листов/форму",
-    b2Spoil: "Запас B2, листов/форму",
-    offsetSpoil: "Запас офсета, листов/форму",
-    cutting: "Резка, ₽/лист",
-    cuttingSetup: "Настройка резки, ₽",
-    lamination: "Ламинация, ₽/лист/сторона",
-    softDigital: "Софт-тач SRA3, ₽/лист/сторона",
-    softOther: "Софт-тач прочие, ₽/лист/сторона",
-    laminationSetup: "Настройка ламинации, ₽",
-    score: "Биговка, ₽/биг",
-    scoreSetup: "Настройка биговки, ₽",
-    folding: "Фальцовка, ₽/элемент",
-    foldingSetup: "Настройка фальцовки, ₽",
-    diecut: "Вырубка, ₽/удар",
-    diecutSetup: "Настройка вырубки, ₽",
-    uv: "УФ-лак, ₽/лист",
-    uvSetup: "Настройка УФ-лака, ₽",
-    emboss: "Тиснение, ₽/элемент",
-    embossSetup: "Настройка тиснения, ₽",
-    rounding: "Округление вверх, ₽",
-    flyerPlotterSheet: "Плоттер листовок, ₽/секция 320×450",
-    flyerPlotterMinimum: "Минимум плоттера листовок, ₽/заказ",
-    tentPolimatBlock: "Покупной блок домика, ₽/шт.",
-    tentPolimatW: "Ширина покупного блока, мм",
-    tentPolimatH: "Высота покупного блока, мм"
-  };
-
-  function objectTable(obj) {
-    return `
-      <div class="table-scroll">
-        <table><tbody>
-          ${Object.entries(obj).map(([key, value]) => `
-            <tr>
-              <td>${esc(RATE_NAMES[key] || key)}</td>
-              <td>${esc(typeof value === "number" ? num(value) : String(value))}</td>
-            </tr>
-          `).join("")}
-        </tbody></table>
-      </div>
-    `;
   }
 
   function ratesDialog() {
@@ -3628,13 +3654,11 @@ const FLYER_DENSITIES = [
           Дата: ${esc(current.meta.updated)}.
           ${archived ? "<br>Текущий заказ использует архивный справочник." : ""}
         </div>
-
         ${pro ? `
           <p class="muted">
-            Приладки печати SRA3 и B2 принудительно отключены в формулах.
+            Приладки печати SRA3 и B2 отключены в формулах.
             Специальные приладки действуют только на офсете.
           </p>
-
           <details class="foldout section-gap">
             <summary>Общие правила</summary>
             <div class="foldout-body">
@@ -3645,39 +3669,48 @@ const FLYER_DENSITIES = [
               })}
             </div>
           </details>
-
           <details class="foldout section-gap">
             <summary>Печать и отделка</summary>
             <div class="foldout-body">${objectTable(effectiveRates)}</div>
           </details>
-
           <details class="foldout section-gap">
             <summary>Дополнительные тарифы</summary>
             <div class="foldout-body">${objectTable(current.extra)}</div>
           </details>
-
           <details class="foldout section-gap">
             <summary>Специальные приладки офсета</summary>
             <div class="foldout-body">
               ${objectTable({ ...current.policy, scope: "offset" })}
             </div>
           </details>
-
           <details class="foldout section-gap">
             <summary>Бумага и материалы</summary>
             <div class="foldout-body">
-              ${Object.values(current.papers).map(p => `
+              ${Object.entries(current.papers).map(([id, p]) => `
                 <div class="detail-block">
                   <h3>${esc(p.label)}</h3>
                   <p class="small">
-                    ${money(p.priceKg)}/кг ·
-                    ${money(p.priceSheet)}/лист.
+                    ${p.priceMode === "kg"
+                      ? money(p.priceKg) + "/кг"
+                      : money(p.priceSheet) + "/лист"}
                   </p>
+                  ${p.densities ? `
+                    <p class="small">
+                      Плотности: ${esc(p.densities.join(", "))} г/м².
+                    </p>
+                  ` : ""}
+                  ${flyerCatalogPrice({ paper: id }) ? `
+                    <p class="small">
+                      Листовки: ${esc(flyerTariffText({ paper: id }, current))}
+                    </p>
+                  ` : ""}
+                  ${id === "adhesiveFilm" ? `
+                    <p class="small">В листовках недоступна.</p>
+                  ` : ""}
                 </div>
               `).join("")}
             </div>
           </details>
-
           <details class="foldout section-gap">
             <summary>Календарные блоки</summary>
             <div class="foldout-body">
@@ -3689,7 +3722,6 @@ const FLYER_DENSITIES = [
                   `).join("")}
                 </div>
               `).join("")}
-
               ${["threeMini", "threeMidi"].map(key => `
                 <p class="small section-gap">
                   ${esc(current.polimat[key].name)} —
@@ -3704,26 +3736,15 @@ const FLYER_DENSITIES = [
             в профессиональном режиме.
             Параметры компонентов листовок доступны без пароля.
           </p>
-
           <div class="actions section-gap">
-            <button class="button" data-action="pro-login">
-              Войти в проф. режим
-            </button>
+            <button class="button" data-action="pro-login">Войти в проф. режим</button>
           </div>
         `}
-
         <div class="actions section-gap">
-          <button class="button" data-action="export">
-            Экспорт расчётов и шаблонов
-          </button>
-          <button class="button" data-action="import">
-            Импорт резервной копии
-          </button>
-          <button class="button" data-action="templates-open">
-            Шаблоны
-          </button>
+          <button class="button" data-action="export">Экспорт расчётов и шаблонов</button>
+          <button class="button" data-action="import">Импорт резервной копии</button>
+          <button class="button" data-action="templates-open">Шаблоны</button>
         </div>
-
         <p class="small section-gap">
           Резервная копия содержит тарифы внутри снимков.
           Не передавайте её клиентам, если себестоимость служебная.
@@ -3736,20 +3757,299 @@ const FLYER_DENSITIES = [
   }
 
   // ============================================================
+  // ВИЗУАЛИЗАЦИЯ ЛИСТОВОК
+  // ============================================================
+
+  function placementGrid(w, h, iw, ih) {
+    const variants = [
+      {
+        cols: Math.floor(w / iw),
+        rows: Math.floor(h / ih),
+        cellW: iw,
+        cellH: ih,
+        rotated: false
+      },
+      {
+        cols: Math.floor(w / ih),
+        rows: Math.floor(h / iw),
+        cellW: ih,
+        cellH: iw,
+        rotated: true
+      }
+    ];
+
+    for (const v of variants) v.count = v.cols * v.rows;
+
+    return variants[1].count > variants[0].count
+      ? variants[1]
+      : variants[0];
+  }
+
+  function flyerLayoutSVG(p, sheet, zones) {
+    const left = (sheet.w - sheet.pw) / 2;
+    const top = (sheet.h - sheet.ph) / 2;
+    const iw = p.w + 2 * p.bleed;
+    const ih = p.h + 2 * p.bleed;
+
+    const content = zones.map((zone, index) => {
+      const grid = placementGrid(zone.w, zone.h, iw, ih);
+      if (!grid.count) return "";
+
+      const gridW = grid.cols * grid.cellW;
+      const gridH = grid.rows * grid.cellH;
+      const patternId = "flyer-cell-" + index;
+
+      return `
+        ${zone.sw ? `
+          <rect
+            x="${zone.sx}" y="${zone.sy}"
+            width="${zone.sw}" height="${zone.sh}"
+            fill="none" stroke="#d97706"
+            stroke-width="1.2" stroke-dasharray="5 3"
+          />
+        ` : ""}
+
+        <svg
+          x="${zone.x}" y="${zone.y}"
+          width="${gridW}" height="${gridH}"
+          viewBox="0 0 ${gridW} ${gridH}"
+          overflow="hidden"
+        >
+          <defs>
+            <pattern
+              id="${patternId}"
+              x="0" y="0"
+              width="${grid.cellW}" height="${grid.cellH}"
+              patternUnits="userSpaceOnUse"
+            >
+              <rect
+                x="0" y="0"
+                width="${grid.cellW}" height="${grid.cellH}"
+                fill="#eeecff" stroke="#aaa2ed"
+                stroke-width=".5" stroke-dasharray="2 1"
+              />
+              <rect
+                x="${p.bleed}" y="${p.bleed}"
+                width="${grid.cellW - 2 * p.bleed}"
+                height="${grid.cellH - 2 * p.bleed}"
+                fill="#c9c3ff" stroke="#635bff" stroke-width=".7"
+              />
+            </pattern>
+          </defs>
+          <rect
+            x="0" y="0" width="${gridW}" height="${gridH}"
+            fill="url(#${patternId})"
+          />
+        </svg>
+      `;
+    }).join("");
+
+    return `
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="-12 -12 ${sheet.w + 24} ${sheet.h + 24}"
+        role="img"
+        aria-label="Размещение листовок на печатном листе"
+        style="display:block;width:100%;height:auto;max-height:55vh"
+      >
+        <title>${esc(p.name)} — ${esc(sheet.label)}</title>
+        <rect
+          x="0" y="0" width="${sheet.w}" height="${sheet.h}"
+          fill="white" stroke="#475569" stroke-width="1.2"
+        />
+        <rect
+          x="${left}" y="${top}"
+          width="${sheet.pw}" height="${sheet.ph}"
+          fill="#f8fafc"
+        />
+        ${content}
+        <rect
+          x="${left}" y="${top}"
+          width="${sheet.pw}" height="${sheet.ph}"
+          fill="none" stroke="#168567"
+          stroke-width="1" stroke-dasharray="4 3"
+        />
+      </svg>
+    `;
+  }
+
+  function layoutLegend() {
+    const item = (label, background, border) => `
+      <span style="display:inline-flex;align-items:center;gap:6px">
+        <i style="
+          display:inline-block;
+          width:18px;height:13px;
+          background:${background};
+          border:${border};
+          border-radius:2px
+        "></i>
+        ${label}
+      </span>
+    `;
+
+    return `
+      <div class="small" style="
+        display:flex;flex-wrap:wrap;
+        gap:10px 18px;margin-top:14px
+      ">
+        ${item("Готовое изделие", "#c9c3ff", "1px solid #635bff")}
+        ${item("Вылеты", "#eeecff", "1px dashed #aaa2ed")}
+        ${item("Печатная область", "transparent", "1px dashed #168567")}
+        ${item("Секции плоттера", "transparent", "1px dashed #d97706")}
+      </div>
+    `;
+  }
+
+  function showFlyerLayout(componentId = null, methodId = null) {
+    if (order.product !== "flyer") return;
+
+    recalculate();
+    if (!chosen || !derived) {
+      toast("Сначала исправьте параметры расчёта.");
+      return;
+    }
+
+    const active = derived.components.filter(p => p.enabled);
+    const component = active.find(p => p.id === componentId) || active[0];
+    const result = methods.find(m => m.valid && m.id === methodId) || chosen;
+    const part = result.parts.find(p => p.id === component?.id);
+    const sheet = cfg.sheets.find(s => s.id === part?.sheetId);
+
+    if (!component || !part || !sheet) {
+      throw new Error("Не удалось определить лист для визуализации.");
+    }
+
+    const zones = component.plotter
+      ? plotterSections(component, sheet, cfg, true)
+      : [{
+        x: (sheet.w - sheet.pw) / 2,
+        y: (sheet.h - sheet.ph) / 2,
+        w: sheet.pw,
+        h: sheet.ph
+      }];
+
+    const iw = component.w + 2 * component.bleed;
+    const ih = component.h + 2 * component.bleed;
+    const grids = zones.map(zone =>
+      placementGrid(zone.w, zone.h, iw, ih)
+    );
+    const capacity = grids.reduce((sum, grid) => sum + grid.count, 0);
+
+    if (capacity !== part.capacity) {
+      throw new Error("Вместимость схемы не совпадает с расчётом.");
+    }
+
+    const rows = [
+      ["Физический лист", `${num(sheet.w)}×${num(sheet.h)} мм`],
+      ["Печатная область", `${num(sheet.pw)}×${num(sheet.ph)} мм`],
+      ["Готовое изделие", `${num(component.w)}×${num(component.h)} мм`],
+      ["Вылет с каждой стороны", `${num(component.bleed)} мм`],
+      ["Ячейка с вылетами", `${num(iw)}×${num(ih)} мм`],
+      ["Вместимость листа", `${num(capacity)} эл.`],
+      ...grids.map((grid, index) => [
+        component.plotter ? "Секция " + (index + 1) : "Сетка размещения",
+        `${num(grid.cols)} по горизонтали, ` +
+        `${num(grid.rows)} по вертикали; ` +
+        (grid.rotated ? "поворот на 90°" : "без поворота")
+      ]),
+      ["Чистый тираж, печатных листов", num(part.baseSheets)],
+      ["Технологический запас", num(part.spoil)],
+      ["Всего печатных листов", num(part.sheets)],
+      ...(component.plotter
+        ? [["Секций плоттера на заказ", num(part.plotterSheets)]]
+        : [])
+    ];
+
+    previewState = {
+      componentId: component.id,
+      methodId: result.id,
+      svg: flyerLayoutSVG(component, sheet, zones)
+    };
+
+    openDialog(
+      "Размещение на листе",
+      `
+        <p class="small">
+          Просмотр другой схемы не меняет выбранную технологию заказа.
+        </p>
+
+        <div class="fields section-gap">
+          <label class="field full">
+            <span>Технология для просмотра</span>
+            <select id="layoutMethod">
+              ${methods.filter(m => m.valid).map(m => `
+                <option value="${esc(m.id)}"
+                  ${m.id === result.id ? "selected" : ""}>
+                  ${esc(m.label)} — ${money(m.price)}
+                </option>
+              `).join("")}
+            </select>
+          </label>
+
+          ${active.length > 1 ? `
+            <label class="field full">
+              <span>Компонент</span>
+              <select id="layoutComponent">
+                ${active.map(p => `
+                  <option value="${esc(p.id)}"
+                    ${p.id === component.id ? "selected" : ""}>
+                    ${esc(p.name)}
+                  </option>
+                `).join("")}
+              </select>
+            </label>
+          ` : ""}
+        </div>
+
+        <div class="actions section-gap" style="justify-content:space-between">
+          <div>
+            <h3>${esc(component.name)}</h3>
+            <p class="small">${esc(result.label)}</p>
+          </div>
+          <span class="badge">${num(capacity)} эл. на листе</span>
+        </div>
+
+        <div class="section-gap" style="
+          padding:16px;border:1px solid var(--line);
+          border-radius:12px;background:#eef1f6
+        ">
+          ${previewState.svg}
+        </div>
+
+        ${layoutLegend()}
+
+        <div class="section-gap">${tableRows(rows)}</div>
+
+        <div class="notice warning section-gap">
+          Это геометрическая схема вместимости, не производственный спуск.
+          Показан полностью заполненный лист; последний лист тиража
+          может быть неполным. Печатная область условно расположена
+          по центру физического листа. Захват машины, направление волокна,
+          метки и смешанная ориентация автоматически не рассчитываются.
+          Схема не показывает оборот и распределение разных макетов.
+        </div>
+
+        <div class="actions">
+          <button class="button" data-action="layout-svg">Скачать схему SVG</button>
+          <button class="button" data-action="dialog-close">Закрыть</button>
+        </div>
+      `,
+      "flyer-layout"
+    );
+  }
+
+  // ============================================================
   // ФАЙЛЫ И КОПИРОВАНИЕ
   // ============================================================
 
   function download(name, text, type) {
     const url = URL.createObjectURL(new Blob([text], { type }));
     const link = document.createElement("a");
-
     link.href = url;
     link.download = name;
-
     document.body.appendChild(link);
     link.click();
     link.remove();
-
     setTimeout(() => URL.revokeObjectURL(url), 3000);
   }
 
@@ -3774,11 +4074,10 @@ const FLYER_DENSITIES = [
       try {
         ok = document.execCommand("copy");
       } catch {
-        // Ниже ручной вариант.
+        // Ниже ручное копирование.
       }
 
       area.remove();
-
       if (ok) toast("Скопировано.");
       else prompt("Скопируйте текст:", text);
     }
@@ -3795,8 +4094,7 @@ const FLYER_DENSITIES = [
       const db = readDatabase(JSON.parse(await file.text()));
 
       if (!confirm(
-        "Заменить сохранённые расчёты и шаблоны? " +
-        "Текущий prices.js не изменится."
+        "Заменить сохранённые расчёты и шаблоны? Текущий prices.js не изменится."
       )) return;
 
       saved = db.saved;
@@ -3806,7 +4104,6 @@ const FLYER_DENSITIES = [
 
       const ok = persist();
       savedDialog();
-
       if (ok) toast("Резервная копия импортирована.");
     } catch (error) {
       console.error(error);
@@ -3821,23 +4118,29 @@ const FLYER_DENSITIES = [
   // ============================================================
 
   function fieldEditable(path) {
+    const match = path.match(/^components\.(\d+)\.(\w+)$/);
+
+    if (
+      match &&
+      order.product === "flyer" &&
+      ["priceMode", "priceKg", "priceSheet"].includes(match[2]) &&
+      flyerCatalogPrice(order.components[Number(match[1])] || {})
+    ) {
+      return false;
+    }
+
     if (pro) return true;
 
     if ([
-      "bag.extraSheets",
-      "bag.confirmPhysical",
-      "bag.includeStamp",
-      "bag.outerContour"
+      "bag.extraSheets", "bag.confirmPhysical",
+      "bag.includeStamp", "bag.outerContour"
     ].includes(path)) return false;
 
     if ([
-      "assembly", "assemblySetup", "accessories",
-      "extra", "accessoriesNote"
+      "assembly", "assemblySetup", "accessories", "extra", "accessoriesNote"
     ].includes(path)) {
       return order.product === "flyer";
     }
-
-    const match = path.match(/^components\.\d+\.(\w+)$/);
 
     if (match && order.product !== "flyer") {
       const advancedKeys = [
@@ -3846,11 +4149,39 @@ const FLYER_DENSITIES = [
         "bleed", "setups", "cutting", "diecut",
         "perStamp", "stamp", "plate", "plotter"
       ];
-
-      if (advancedKeys.includes(match[1])) return false;
+      if (advancedKeys.includes(match[2])) return false;
     }
 
     return true;
+  }
+
+  function refreshQuickButtons() {
+    document.querySelectorAll('[data-action="quantity"]').forEach(button => {
+      button.classList.toggle(
+        "active",
+        Number(button.dataset.value) === order.quantity
+      );
+    });
+
+    if (order.product !== "flyer") return;
+
+    document.querySelectorAll('[data-action="flyer-size"]').forEach(button => {
+      const p = order.components[Number(button.dataset.index)];
+      const f = FLYER_FORMATS.find(item => item.id === button.dataset.value);
+      const active = !!p && !!f && (
+        (p.w === f.w && p.h === f.h) ||
+        (p.w === f.h && p.h === f.w)
+      );
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+
+    document.querySelectorAll('[data-action="flyer-density"]').forEach(button => {
+      const p = order.components[Number(button.dataset.index)];
+      const active = !!p && p.density === Number(button.dataset.value);
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
   }
 
   function updateField(target, structural) {
@@ -3858,7 +4189,6 @@ const FLYER_DENSITIES = [
     if (!path || target.disabled || !fieldEditable(path)) return;
 
     let value;
-
     if (target.type === "checkbox") {
       value = target.checked;
     } else if (target.type === "number" || target.dataset.numeric) {
@@ -3867,8 +4197,18 @@ const FLYER_DENSITIES = [
       value = target.value;
     }
 
-    if (!setPath(order, path, value)) return;
+    const match = path.match(/^components\.(\d+)\.(\w+)$/);
 
+    if (
+      match &&
+      order.product === "flyer" &&
+      match[2] === "paper" &&
+      (value === "adhesiveFilm" || !cfg.papers[value])
+    ) {
+      return;
+    }
+
+    if (!setPath(order, path, value)) return;
     if (!["name", "note"].includes(path)) selectedMethod = null;
 
     if (["bag.a", "bag.b", "bag.c"].includes(path)) {
@@ -3894,15 +4234,12 @@ const FLYER_DENSITIES = [
       }
     }
 
-    const match = path.match(/^components\.(\d+)\.(\w+)$/);
-
     if (match) {
       const p = order.components[Number(match[1])];
       const key = match[2];
 
       if (key === "paper") {
         const material = cfg.papers[value];
-
         if (material) {
           Object.assign(p, {
             density: material.density,
@@ -3926,13 +4263,7 @@ const FLYER_DENSITIES = [
     if (structural) {
       renderAll();
     } else {
-      document.querySelectorAll('[data-action="quantity"]').forEach(button => {
-        button.classList.toggle(
-          "active",
-          Number(button.dataset.value) === order.quantity
-        );
-      });
-
+      refreshQuickButtons();
       clearTimeout(timer);
       timer = setTimeout(recalculate, 180);
     }
@@ -3960,7 +4291,6 @@ const FLYER_DENSITIES = [
 
       if (value === "custom" && q.size !== "custom") {
         const geometry = cfg.calendar[q.size];
-
         Object.assign(q, {
           tier: q.size,
           customW: geometry.w,
@@ -3984,7 +4314,6 @@ const FLYER_DENSITIES = [
 
   document.addEventListener("input", event => {
     if (!ready) return;
-
     const target = event.target;
 
     if (target.matches(
@@ -3996,10 +4325,19 @@ const FLYER_DENSITIES = [
 
   document.addEventListener("change", event => {
     if (!ready) return;
-
     const target = event.target;
 
     try {
+      if (target.id === "layoutMethod") {
+        showFlyerLayout(previewState?.componentId, target.value);
+        return;
+      }
+
+      if (target.id === "layoutComponent") {
+        showFlyerLayout(target.value, previewState?.methodId);
+        return;
+      }
+
       if (target.id === "mobileProduct") {
         chooseProduct(target.value);
         return;
@@ -4015,7 +4353,6 @@ const FLYER_DENSITIES = [
       if (target.matches("input[data-saved]")) {
         if (target.checked) selectedSaved.add(target.dataset.saved);
         else selectedSaved.delete(target.dataset.saved);
-
         renderSavedSum();
         return;
       }
@@ -4044,10 +4381,8 @@ const FLYER_DENSITIES = [
 
     password.value = "";
     pro = true;
-
     closeDialog();
     renderAll();
-
     toast("Профессиональный режим открыт.");
   });
 
@@ -4073,9 +4408,7 @@ const FLYER_DENSITIES = [
         case "pro-toggle":
           if (pro) {
             pro = false;
-
             if ($("managerDialog").open) closeDialog();
-
             renderAll();
             toast("Профессиональный режим закрыт.");
           } else {
@@ -4098,29 +4431,20 @@ const FLYER_DENSITIES = [
           setFormat(button.dataset.scope, button.dataset.value);
           break;
 
-                  case "flyer-size": {
+        case "flyer-size": {
           if (order.product !== "flyer") return;
-
           const index = Number(button.dataset.index);
-
-          if (
-            !Number.isInteger(index) ||
-            index < 0 ||
-            index >= order.components.length
-          ) return;
+          if (!whole(index) || index >= order.components.length) return;
 
           const component = order.components[index];
-          if (!component.enabled) return;
-
           const format = FLYER_FORMATS.find(
             item => item.id === button.dataset.value
           );
 
-          if (!format) return;
+          if (!component.enabled || !format) return;
 
           component.w = format.w;
           component.h = format.h;
-
           selectedMethod = null;
           renderAll();
           break;
@@ -4128,35 +4452,42 @@ const FLYER_DENSITIES = [
 
         case "flyer-density": {
           if (order.product !== "flyer") return;
-
           const index = Number(button.dataset.index);
           const density = Number(button.dataset.value);
-
-          if (
-            !Number.isInteger(index) ||
-            index < 0 ||
-            index >= order.components.length ||
-            !FLYER_DENSITIES.includes(density)
-          ) return;
+          if (!whole(index) || index >= order.components.length) return;
 
           const component = order.components[index];
-          if (!component.enabled) return;
+          if (
+            !component.enabled ||
+            !flyerDensities(component, cfg).includes(density)
+          ) return;
 
           component.density = density;
-
           selectedMethod = null;
           renderAll();
           break;
         }
 
-                case "bag-preset":
+        case "flyer-layout":
+          showFlyerLayout();
+          break;
+
+        case "layout-svg":
+          if (!previewState?.svg) return;
+          download(
+            "SlonPress_Листовки_размещение.svg",
+            '<?xml version="1.0" encoding="UTF-8"?>\n' + previewState.svg,
+            "image/svg+xml;charset=utf-8"
+          );
+          break;
+
+        case "bag-preset":
           Object.assign(
             order.bag,
             button.dataset.value === "large"
               ? { a: 300, b: 400, c: 120, type: "half" }
               : { a: 250, b: 350, c: 100, type: "full" }
           );
-
           order.bag.confirmPhysical = false;
           selectedMethod = null;
           renderAll();
@@ -4164,12 +4495,7 @@ const FLYER_DENSITIES = [
 
         case "bag-svg": {
           const svg = bagSVG(order.bag, true);
-
-          if (!svg) {
-            toast("Сначала заполните размеры пакета.");
-            return;
-          }
-
+          if (!svg) return toast("Сначала заполните размеры пакета.");
           download(
             "SlonPress_Пакет_развёртка.svg",
             '<?xml version="1.0" encoding="UTF-8"?>\n' + svg,
@@ -4182,13 +4508,10 @@ const FLYER_DENSITIES = [
           if (!advancedComponents()) return;
 
           if (order.product === "threeinone") {
-            toast("Календарь 3 в 1 содержит одну печатную основу.");
-            return;
+            return toast("Календарь 3 в 1 содержит одну печатную основу.");
           }
-
           if (order.components.length >= 100) {
-            toast("Максимум — 100 компонентов.");
-            return;
+            return toast("Максимум — 100 компонентов.");
           }
 
           order.components.push(makeComponent(cfg));
@@ -4198,14 +4521,8 @@ const FLYER_DENSITIES = [
 
         case "component-remove": {
           if (!advancedComponents()) return;
-
           const index = Number(button.dataset.index);
-
-          if (
-            !Number.isInteger(index) ||
-            index < 0 ||
-            index >= order.components.length
-          ) return;
+          if (!whole(index) || index >= order.components.length) return;
 
           const component = order.components[index];
 
@@ -4214,18 +4531,14 @@ const FLYER_DENSITIES = [
             (order.product === "paket" && component.role === "bag") ||
             managedTentComponent(order, component)
           ) {
-            toast("Этот компонент управляется комплектацией изделия.");
-            return;
+            return toast("Этот компонент управляется комплектацией изделия.");
           }
 
           if (order.components.length <= 1) {
-            toast("Оставьте хотя бы один компонент.");
-            return;
+            return toast("Оставьте хотя бы один компонент.");
           }
 
-          if (!confirm(
-            "Удалить компонент «" + component.name + "»?"
-          )) return;
+          if (!confirm("Удалить компонент «" + component.name + "»?")) return;
 
           order.components.splice(index, 1);
           selectedMethod = null;
@@ -4235,46 +4548,32 @@ const FLYER_DENSITIES = [
 
         case "method":
           if (!pro) return;
-
           selectedMethod = id;
           recalculate();
           break;
 
         case "method-auto":
           if (!pro) return;
-
           selectedMethod = null;
           recalculate();
           break;
 
         case "copy":
           recalculate();
-
-          if (!chosen) {
-            toast("Нет корректного расчёта.");
-            return;
-          }
-
+          if (!chosen) return toast("Нет корректного расчёта.");
           copyText(quote());
           break;
 
         case "print": {
           recalculate();
-
-          if (!chosen) {
-            toast("Нет корректного расчёта.");
-            return;
-          }
+          if (!chosen) return toast("Нет корректного расчёта.");
 
           const details = $("result-spec");
           const wasOpen = details?.open ?? false;
-
           if (details) details.open = true;
 
           const restore = () => {
-            if (details?.isConnected) {
-              details.open = wasOpen;
-            }
+            if (details?.isConnected) details.open = wasOpen;
             window.removeEventListener("afterprint", restore);
           };
 
@@ -4286,7 +4585,6 @@ const FLYER_DENSITIES = [
             restore();
             throw error;
           }
-
           break;
         }
 
@@ -4296,10 +4594,7 @@ const FLYER_DENSITIES = [
 
         case "template-save":
           saveTemplate();
-
-          if (dialogView === "templates") {
-            templatesDialog();
-          }
+          if (dialogView === "templates") templatesDialog();
           break;
 
         case "saved-open":
@@ -4326,95 +4621,69 @@ const FLYER_DENSITIES = [
           loadTemplate(id);
           break;
 
-        case "use-current":
+        case "use-current": {
           if (!confirm(
             "Применить текущие базовые цены?\n\n" +
             "Ручные цены бумаги, штампов, клише, сборки, " +
             "комплектующих и прочих расходов будут заменены.\n\n" +
+            "Размеры и плотности останутся прежними. " +
+            "Недопустимые параметры потребуется исправить.\n\n" +
             "Сохранённый документ останется без изменений."
           )) return;
 
-          // Сначала проверяем возможность пересчёта,
-          // только потом заменяем рабочий заказ.
-          {
-            const repriced = repriceOrder(order);
-            const nextConfig = clone(current);
-            const nextDerived = derive(repriced, nextConfig);
-            const errors = validateOrder(nextDerived, nextConfig);
+          const repriced = repriceOrder(order);
+          const nextConfig = clone(current);
+          const nextDerived = derive(repriced, nextConfig);
 
-            if (errors.length) {
-              throw new Error(errors.join("\n"));
-            }
-
-            order = repriced;
-            cfg = nextConfig;
-            archived = false;
-            selectedMethod = null;
-          }
-
-          renderAll();
-          toast(
-            "Применены текущие тарифы. Проверьте нестандартные расходы."
+          // Проверяем целостность, но позволяем открыть рабочую
+          // копию с устаревшей плотностью и исправить её в форме.
+          const errors = validateOrder(
+            nextDerived,
+            nextConfig,
+            { snapshot: true }
           );
+
+          if (errors.length) throw new Error(errors.join("\n"));
+
+          order = repriced;
+          cfg = nextConfig;
+          archived = false;
+          selectedMethod = null;
+          renderAll();
+          toast("Применены текущие тарифы. Проверьте параметры и расходы.");
           break;
+        }
 
         case "saved-item-copy": {
           const item = saved.find(entry => entry.id === id);
-
-          if (item) {
-            // Копируется сохранённый документ,
-            // без пересчёта по новым формулам.
-            copyText(item.quote);
-          }
+          if (item) copyText(item.quote);
           break;
         }
 
         case "saved-copy": {
-          const selected = saved.filter(
-            entry => selectedSaved.has(entry.id)
-          );
-
+          const selected = saved.filter(entry => selectedSaved.has(entry.id));
           const items = selected.length ? selected : saved;
+          if (!items.length) return toast("Нет сохранённых расчётов.");
 
-          if (!items.length) {
-            toast("Нет сохранённых расчётов.");
-            return;
-          }
-
-          copyText(
-            items
-              .map(entry => entry.quote)
-              .join("\n\n──────────\n\n")
-          );
+          copyText(items.map(entry => entry.quote).join("\n\n──────────\n\n"));
           break;
         }
 
         case "saved-delete":
           if (!saved.some(entry => entry.id === id)) return;
           if (!confirm("Удалить сохранённый расчёт?")) return;
-
           saved = saved.filter(entry => entry.id !== id);
           selectedSaved.delete(id);
-
           persist();
           updateCounts();
           savedDialog();
           break;
 
         case "saved-clear":
-          if (!saved.length) {
-            toast("Сохранённых расчётов нет.");
-            return;
-          }
-
-          if (!confirm(
-            "Удалить все сохранённые расчёты? " +
-            "Шаблоны останутся."
-          )) return;
-
+          if (!saved.length) return toast("Сохранённых расчётов нет.");
+          if (!confirm("Удалить все сохранённые расчёты? Шаблоны останутся.")) return;
           saved = [];
           selectedSaved.clear();
-
           persist();
           updateCounts();
           savedDialog();
@@ -4423,7 +4692,6 @@ const FLYER_DENSITIES = [
         case "template-delete":
           if (!templates.some(entry => entry.id === id)) return;
           if (!confirm("Удалить шаблон?")) return;
-
           templates = templates.filter(entry => entry.id !== id);
           persist();
           templatesDialog();
@@ -4431,9 +4699,7 @@ const FLYER_DENSITIES = [
 
         case "export":
           download(
-            "SlonPress_" +
-              new Date().toISOString().slice(0, 10) +
-              ".json",
+            "SlonPress_" + new Date().toISOString().slice(0, 10) + ".json",
             JSON.stringify(database(), null, 2),
             "application/json;charset=utf-8"
           );
@@ -4441,9 +4707,6 @@ const FLYER_DENSITIES = [
 
         case "import":
           $("importFile").click();
-          break;
-
-        default:
           break;
       }
     } catch (error) {
@@ -4453,24 +4716,7 @@ const FLYER_DENSITIES = [
   });
 
   // ============================================================
-  // ИМПОРТ ФАЙЛОВ И ЗАКРЫТИЕ ОКОН
-  // ============================================================
-
-  $("importFile").addEventListener("change", event => {
-    if (!ready) return;
-    importFile(event.target.files?.[0]);
-  });
-
-  $("managerDialog").addEventListener("close", () => {
-    dialogView = "";
-
-    // Пароль не оставляем в DOM после закрытия окна.
-    const password = $("professionalPassword");
-    if (password) password.value = "";
-  });
-
-  // ============================================================
-  // НАЗВАНИЕ И ПОЯСНЕНИЯ ИНТЕРФЕЙСА
+  // НАЗВАНИЕ И ПРАВИЛА
   // ============================================================
 
   function applyBranding() {
@@ -4482,19 +4728,11 @@ const FLYER_DENSITIES = [
     const brandMark = document.querySelector(".brand-mark");
     if (brandMark) brandMark.textContent = "S";
 
-    const footerName = document.querySelector(
-      ".page-footer > span:first-child"
-    );
-
+    const footerName = document.querySelector(".page-footer > span:first-child");
     if (footerName) {
-      footerName.textContent =
-        "SlonPress.ru · локальное хранение расчётов";
+      footerName.textContent = "SlonPress.ru · локальное хранение расчётов";
     }
 
-    /*
-     * Обновляем пояснения старого index.html.
-     * Остальную структуру интерфейса не меняем.
-     */
     const rulesBody = document.querySelector(
       ".form-column > details.foldout:last-of-type > .foldout-body"
     );
@@ -4505,77 +4743,71 @@ const FLYER_DENSITIES = [
           Расчёт предварительный. Материалы, оборудование,
           раскладку и макет проверяет технолог.
         </p>
-
         <p>
           Прямоугольная раскладка проверяет две ориентации.
           Смешанное размещение, направление волокна,
           производственный спуск полос и особенности захвата машины
           автоматически не рассчитываются.
         </p>
-
+        <p>
+          Листовки: допустимые плотности и цены материалов берутся
+          из prices.js. Дизайнерская бумага — только SRA3.
+          Бумажная самоклейка — SRA3, 470×620 и 500×700 мм.
+          Плёнка в листовках недоступна.
+        </p>
+        <p>
+          Кнопка «Размещение на листе» показывает геометрическую
+          вместимость выбранного листа с учётом вылетов.
+          Печатная область условно расположена по центру.
+          Это не готовый производственный спуск.
+        </p>
         <p>
           Брошюра задаётся в готовом размере страницы.
           Расчёт выполняется по разворотам.
           Полосы блока указываются без обложки, кратно четырём.
           Расчётный спуск необходимо проверить перед производством.
         </p>
-
         <p>
-          Цифра SRA3 и B2:
-          бумага и оттиски считаются без отдельной платы
-          за приладку печати.
-          Технологический запас берётся из справочника.
-          Настройки резки, ламинации и других операций
+          Цифра SRA3 и B2: бумага и оттиски считаются без отдельной
+          платы за приладку печати. Технологический запас берётся
+          из справочника. Настройки резки, ламинации и других операций
           могут оплачиваться отдельно.
         </p>
-
         <p>
-          Плоттер рассчитывается по секциям 320×450 мм
-          с учётом заданных полей.
+          Плоттер рассчитывается по секциям 320×450 мм с учётом полей.
           Приладочный запас не отправляется на плоттер.
-          Для листовок минимальная стоимость плоттера
-          применяется один раз на весь заказ до общей наценки.
-          Обычная резка компонента при включённом плоттере
-          не начисляется.
-          Сложность контура автоматически не оценивается.
+          Для листовок минимум применяется один раз на весь заказ
+          до общей наценки. Обычная резка компонента при включённом
+          плоттере не начисляется. Сложность контура не оценивается.
         </p>
-
         <p>
-          Домики:
-          А5 — перекидные листы 210×148 мм,
-          квадрат — 205×205 мм.
-          Основание задаётся отдельно в развёртке.
-          Размер и цена покупного блока Полимат
-          берутся из prices.js.
+          Домики: А5 — перекидные листы 210×148 мм,
+          квадрат — 205×205 мм. Основание задаётся отдельно.
+          Размер и цена покупного блока Полимат берутся из prices.js.
           Покупной блок оплачивается один раз на календарь.
           Верхняя обложка печатается отдельно.
         </p>
-
         <p>
           Число изделий на штампе задаётся вручную.
           Совместимость штампа с раскладкой нужно проверить.
           Биговку, входящую в вырубку, не добавляйте повторно.
         </p>
-
         <p>
           Прибыль указана до налогов и неучтённых расходов.
           НДС отдельно не выделяется.
           УФ использует продажные тарифы без общей наценки.
         </p>
-
         <p>
-          Сохранённые документы и шаблоны хранятся
-          в этом браузере. Для переноса используйте экспорт.
-          При открытии старого заказа создаётся рабочая копия
-          с архивными тарифами и текущими формулами.
+          Документы и шаблоны хранятся в этом браузере.
+          Для переноса используйте экспорт.
+          Старый заказ открывается как рабочая копия
+          с архивными тарифами и текущими формулами и ограничениями.
           Исходный сохранённый документ не изменяется.
         </p>
-
         <p>
-          Профессиональный режим закрывается паролем
-          только на уровне интерфейса.
-          Это не серверная авторизация:
-          исходный код и файл тарифов технически доступны посетителю.
+          Пароль профессионального режима ограничивает только интерфейс.
+          Это не серверная авторизация. Исходный код и файл тарифов
+          технически доступны посетителю.
         </p>
       `;
     }
@@ -4586,10 +4818,20 @@ const FLYER_DENSITIES = [
   // ============================================================
 
   try {
+    $("importFile").addEventListener("change", event => {
+      if (ready) importFile(event.target.files?.[0]);
+    });
+
+    $("managerDialog").addEventListener("close", () => {
+      dialogView = "";
+      previewState = null;
+      const password = $("professionalPassword");
+      if (password) password.value = "";
+    });
+
     applyBranding();
 
     const configErrors = validateConfig(window.PRINT_PRICES);
-
     if (configErrors.length) {
       throw new Error(configErrors.join("\n"));
     }
@@ -4597,56 +4839,38 @@ const FLYER_DENSITIES = [
     current = clone(window.PRINT_PRICES);
     cfg = clone(current);
 
-    /*
-     * Проверяем исходные параметры доступных изделий.
-     * Архивное изделие diecut в каталог новых заказов не входит.
-     *
-     * Новые тарифы плоттера и покупного блока домика проверяются
-     * при включении соответствующих опций. Это позволяет открыть
-     * калькулятор со старым справочником, не подставляя скрытых цен.
-     */
     for (const [id] of PRODUCTS) {
       const sample = baseOrder(id, current);
-      const sampleDerived = derive(sample, current);
-      const errors = validateOrder(sampleDerived, current);
+      const errors = validateOrder(derive(sample, current), current);
 
       if (errors.length) {
-        throw new Error(
-          product(id)[1] + ": " + errors.join("\n")
-        );
+        throw new Error(product(id)[1] + ": " + errors.join("\n"));
       }
     }
 
     order = baseOrder("flyer", cfg);
-
     loadStorage();
     renderAll();
-
     ready = true;
   } catch (error) {
     ready = false;
     console.error(error);
 
     const content = document.querySelector(".content");
-
     if (content) {
       content.innerHTML = `
         <section class="card">
           <div class="card-body">
             <h1>Не удалось запустить калькулятор</h1>
-
             <p class="subtitle">
               Проверьте файл prices.js, порядок подключения
               скриптов и консоль браузера.
             </p>
-
             <div class="error section-gap">
-              ${String(error.message)
-                .split("\n")
-                .map(text => `<div>${esc(text)}</div>`)
-                .join("")}
+              ${String(error.message).split("\n").map(text => `
+                <div>${esc(text)}</div>
+              `).join("")}
             </div>
-
             <p class="small section-gap">
               Сначала должен подключаться prices.js,
               затем calculator.js.
