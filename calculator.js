@@ -1,9 +1,41 @@
 "use strict";
 
 (() => {
+  // ============================================================
+  // SLONPRESS.RU — КАЛЬКУЛЯТОР ПОЛИГРАФИИ
+  //
+  // Основные тарифы: window.PRINT_PRICES из prices.js.
+  // Плавная шкала: prices.js → markupScale.
+  // Если шкала отсутствует, для новых заказов применяется
+  // DEFAULT_MARKUP_SCALE, определённая ниже.
+  //
+  // Пароль ограничивает интерфейс, а не доступ к исходному коду.
+  // ============================================================
+
   const PROFESSIONAL_PASSWORD = "507";
   const STORAGE_KEY = "print_studio_2026_v1";
   const DATABASE_VERSION = 1;
+
+  const DEFAULT_MARKUP_SCALE = [
+    { cost: 1000, percent: 80 },
+    { cost: 2000, percent: 45 },
+    { cost: 3000, percent: 40 },
+    { cost: 4000, percent: 37 },
+    { cost: 5000, percent: 35 },
+    { cost: 6000, percent: 33 },
+    { cost: 7000, percent: 31 },
+    { cost: 8000, percent: 30 },
+    { cost: 9000, percent: 28 },
+    { cost: 10000, percent: 27 },
+    { cost: 11000, percent: 26 },
+    { cost: 15000, percent: 24 },
+    { cost: 21000, percent: 22 },
+    { cost: 30000, percent: 20 },
+    { cost: 40000, percent: 18 },
+    { cost: 50000, percent: 17 },
+    { cost: 60000, percent: 16 },
+    { cost: 70000, percent: 15 }
+  ];
 
   const $ = id => document.getElementById(id);
   const clone = value => structuredClone(value);
@@ -184,6 +216,7 @@
   const isBook = o => ["bloknot", "broshyura"].includes(o.product);
   const isSticker = o => ["stickers", "stickerpack"].includes(o.product);
   const advancedComponents = () => pro || order.product === "flyer";
+
   const tierKey = (tier, suffix) =>
     "quarter" + tier[0].toUpperCase() + tier.slice(1) + suffix;
 
@@ -205,27 +238,34 @@
   let ready = false;
   let storageReadable = true;
   let previewState = null;
+  let usesBuiltInScale = false;
 
   // ============================================================
   // ОБЩИЕ ФУНКЦИИ
   // ============================================================
 
   function toast(text) {
-    $("toast").textContent = text;
-    $("toast").hidden = false;
+    const root = $("toast");
+    if (!root) return;
+
+    root.textContent = text;
+    root.hidden = false;
     clearTimeout(toastTimer);
+
     toastTimer = setTimeout(() => {
-      $("toast").hidden = true;
+      root.hidden = true;
     }, 5000);
   }
 
   function setPath(target, path, value) {
     const keys = path.split(".");
+
     if (keys.some(key =>
       ["__proto__", "prototype", "constructor"].includes(key)
     )) return false;
 
     let node = target;
+
     for (const key of keys.slice(0, -1)) {
       if (!node || !Object.hasOwn(node, key)) return false;
       node = node[key];
@@ -241,10 +281,16 @@
   function roundUp(value, step) {
     const unit = step > 0 ? step : 0.01;
     const quotient = value / unit;
+
     return Math.ceil(
       quotient -
       Number.EPSILON * Math.max(1, Math.abs(quotient)) * 8
     ) * unit;
+  }
+
+  function validCost(value) {
+    return nonnegative(value) &&
+      value <= Number.MAX_SAFE_INTEGER / 100;
   }
 
   function fit(w, h, iw, ih) {
@@ -258,20 +304,158 @@
     return Number.isSafeInteger(count) ? count : 0;
   }
 
-  function validCost(value) {
-    return nonnegative(value) &&
-      value <= Number.MAX_SAFE_INTEGER / 100;
-  }
-
   function requireExtra(c, keys) {
     for (const key of keys) {
       if (!nonnegative(c.extra?.[key])) {
         throw new Error(
           `Не задан тариф prices.js → extra.${key}. ` +
-          "Обновите справочник или примените текущие тарифы к архиву."
+          "Обновите справочник или примените текущие тарифы."
         );
       }
     }
+  }
+
+  // ============================================================
+  // ПЛАВНАЯ ШКАЛА НАЦЕНКИ
+  // ============================================================
+
+  function validateMarkupScale(c) {
+    const scale = c.markupScale;
+
+    // Старые снимки могут содержать только фиксированную наценку.
+    if (scale === undefined) return [];
+
+    if (!Array.isArray(scale) || scale.length < 2) {
+      return [
+        "Шкала markupScale должна содержать минимум две точки."
+      ];
+    }
+
+    const errors = [];
+    let previousCost = -Infinity;
+    let previousProfit = -Infinity;
+    let previousPrice = -Infinity;
+
+    for (let index = 0; index < scale.length; index++) {
+      const point = scale[index];
+      const label = "Точка шкалы №" + (index + 1);
+
+      if (
+        !object(point) ||
+        !positive(point.cost) ||
+        !nonnegative(point.percent)
+      ) {
+        errors.push(
+          label + ": проверьте себестоимость и процент наценки."
+        );
+        continue;
+      }
+
+      const profit = point.cost * point.percent / 100;
+      const price = point.cost + profit;
+
+      if (!validCost(profit) || !validCost(price)) {
+        errors.push(label + ": слишком большая стоимость.");
+        continue;
+      }
+
+      if (point.cost <= previousCost) {
+        errors.push(
+          label + ": себестоимость должна быть больше предыдущей."
+        );
+      }
+
+      if (profit < previousProfit) {
+        errors.push(
+          label + ": сумма прибыли не должна уменьшаться."
+        );
+      }
+
+      if (price < previousPrice) {
+        errors.push(
+          label + ": продажная цена не должна уменьшаться."
+        );
+      }
+
+      previousCost = point.cost;
+      previousProfit = profit;
+      previousPrice = price;
+    }
+
+    return [...new Set(errors)];
+  }
+
+  function calculateSellingPrice(cost, c) {
+    if (!validCost(cost)) {
+      throw new Error("Некорректная себестоимость заказа.");
+    }
+
+    const errors = validateMarkupScale(c);
+    if (errors.length) throw new Error(errors.join("\n"));
+
+    const scale = c.markupScale;
+    let markupAmount;
+    let pricingMode;
+
+    if (scale === undefined) {
+      if (!nonnegative(c.markup)) {
+        throw new Error("Не задана корректная фиксированная наценка.");
+      }
+
+      markupAmount = cost * c.markup / 100;
+      pricingMode = "fixed";
+    } else {
+      pricingMode = "scale";
+
+      const first = scale[0];
+      const last = scale[scale.length - 1];
+
+      if (cost <= first.cost) {
+        markupAmount = cost * first.percent / 100;
+      } else if (cost >= last.cost) {
+        markupAmount = cost * last.percent / 100;
+      } else {
+        const upperIndex = scale.findIndex(
+          point => cost <= point.cost
+        );
+
+        const lower = scale[upperIndex - 1];
+        const upper = scale[upperIndex];
+
+        const lowerProfit = lower.cost * lower.percent / 100;
+        const upperProfit = upper.cost * upper.percent / 100;
+
+        const fraction =
+          (cost - lower.cost) /
+          (upper.cost - lower.cost);
+
+        markupAmount =
+          lowerProfit +
+          (upperProfit - lowerProfit) * fraction;
+      }
+    }
+
+    const rawPrice = cost + markupAmount;
+    const price = roundUp(rawPrice, c.rates.rounding);
+
+    if (!validCost(rawPrice) || !validCost(price)) {
+      throw new Error("Некорректная продажная цена.");
+    }
+
+    return {
+      price,
+      rawPrice,
+      markupAmount,
+      markupPercent: cost > 0 ? markupAmount / cost * 100 : 0,
+      profit: price - cost,
+      pricingMode
+    };
+  }
+
+  function pricingRuleText(c) {
+    return Array.isArray(c.markupScale)
+      ? "Плавная шкала наценки"
+      : "Фиксированная наценка " + num(c.markup) + "%";
   }
 
   // ============================================================
@@ -286,6 +470,7 @@
 
   function flyerDensities(p, c) {
     const values = c.papers[p.paper]?.densities;
+
     return Array.isArray(values) && values.length
       ? values
       : FLYER_DENSITIES;
@@ -302,6 +487,7 @@
     }
 
     const values = c.papers[p.paper]?.densities;
+
     if (
       Array.isArray(values) &&
       values.length &&
@@ -309,8 +495,7 @@
     ) {
       errors.push(
         "допустимая плотность: " +
-        values.join(", ") +
-        " г/м²."
+        values.join(", ") + " г/м²."
       );
     }
 
@@ -319,6 +504,7 @@
 
   function flyerPaperCost(p, sheet, c) {
     const paper = c.papers[p.paper];
+
     if (!paper) throw new Error("Неизвестный материал.");
 
     if (p.paper === "adhesiveFilm") {
@@ -354,20 +540,24 @@
 
     if (p.paper === "designer") {
       const rate = paper.sheetPrices?.Z ?? paper.priceSheet;
+
       if (!nonnegative(rate)) {
         throw new Error("Не задана цена дизайнерской бумаги.");
       }
+
       return rate;
     }
 
     if (p.paper === "adhesive") {
       const rate = paper.sheetPrices?.[sheet.id];
+
       if (!nonnegative(rate)) {
         throw new Error(
           "Не задана цена самоклейки для этого листа. " +
           "Примените текущие тарифы."
         );
       }
+
       return rate;
     }
 
@@ -387,9 +577,10 @@
     if (!paper) return "";
 
     if (p.paper === "adhesive") {
-      const rate = id => nonnegative(paper.sheetPrices?.[id])
-        ? money(paper.sheetPrices[id])
-        : "тариф не задан";
+      const rate = id =>
+        nonnegative(paper.sheetPrices?.[id])
+          ? money(paper.sheetPrices[id])
+          : "тариф не задан";
 
       return (
         `SRA3 — ${rate("Z")}/лист; ` +
@@ -401,11 +592,18 @@
 
     if (p.paper === "designer") {
       const rate = paper.sheetPrices?.Z ?? paper.priceSheet;
-      return `${money(rate)}/лист SRA3. Другие форматы не рассчитываются.`;
+
+      return (
+        `${money(rate)}/лист SRA3. ` +
+        "Другие форматы не рассчитываются."
+      );
     }
 
     if (["offset", "cardboard"].includes(p.paper)) {
-      return `${money(paper.priceKg)}/кг. Цена из справочника тарифов.`;
+      return (
+        `${money(paper.priceKg)}/кг. ` +
+        "Цена из справочника тарифов."
+      );
     }
 
     return "";
@@ -417,19 +615,29 @@
 
   function validateConfig(c) {
     const errors = [];
+
     if (!object(c)) return ["Не найден window.PRINT_PRICES."];
 
     if (!c.meta?.version || !c.meta?.updated) {
       errors.push("Не заданы версия и дата тарифов.");
     }
 
-    if (!nonnegative(c.markup)) errors.push("Некорректная наценка.");
-
-    if (!integer(c.defaultQuantity) || !integer(c.hybridLimit)) {
-      errors.push("Проверьте базовый тираж и предел гибридного производства.");
+    if (!nonnegative(c.markup)) {
+      errors.push("Некорректная резервная фиксированная наценка.");
     }
 
-    if (!Array.isArray(c.quantities) || !c.quantities.every(integer)) {
+    errors.push(...validateMarkupScale(c));
+
+    if (!integer(c.defaultQuantity) || !integer(c.hybridLimit)) {
+      errors.push(
+        "Проверьте базовый тираж и предел гибридного производства."
+      );
+    }
+
+    if (
+      !Array.isArray(c.quantities) ||
+      !c.quantities.every(integer)
+    ) {
       errors.push("Проверьте список популярных тиражей.");
     }
 
@@ -438,6 +646,7 @@
         errors.push("Нет раздела " + group + ".");
         continue;
       }
+
       for (const [key, value] of Object.entries(c[group])) {
         if (!nonnegative(value)) {
           errors.push("Некорректный тариф: " + key);
@@ -461,7 +670,9 @@
       }
     }
 
-    for (const key of ["digitalSpoil", "b2Spoil", "offsetSpoil"]) {
+    for (const key of [
+      "digitalSpoil", "b2Spoil", "offsetSpoil"
+    ]) {
       if (!whole(c.rates?.[key])) {
         errors.push("Запас должен быть целым: " + key);
       }
@@ -472,8 +683,10 @@
       "brochureAssembly", "wallAssembly", "tentAssembly",
       "tentMountedBase", "stickerPaperM2", "stickerFilmM2",
       "plotterSheet", "plotterMargin", "quarterHardware",
-      "quarterMiniAssembly", "quarterMidiAssembly", "quarterMaxiAssembly",
-      "quarterMiniMagnet", "quarterMidiMagnet", "quarterMaxiMagnet",
+      "quarterMiniAssembly", "quarterMidiAssembly",
+      "quarterMaxiAssembly",
+      "quarterMiniMagnet", "quarterMidiMagnet",
+      "quarterMaxiMagnet",
       "threeMiniAssembly", "threeMidiAssembly",
       "b2ExtraSheets", "stampMeter", "stampBase",
       "uvAdhesive", "uvAdhesiveWhite", "uvAdhesiveSetup",
@@ -500,7 +713,9 @@
       "uvBedW", "uvBedH", "uvCycle", "uvCycleWhite",
       "uvSheetPrint", "uvSheetPrintWhite"
     ]) {
-      if (!positive(c.extra?.[key])) errors.push("Проверьте " + key);
+      if (!positive(c.extra?.[key])) {
+        errors.push("Проверьте " + key);
+      }
     }
 
     if (!integer(c.extra?.uvLoadGroup)) {
@@ -531,13 +746,16 @@
     } else {
       for (const s of c.sheets) {
         if (
-          !s.id || sheetIds.has(s.id) ||
+          !s.id ||
+          sheetIds.has(s.id) ||
           ![s.w, s.h, s.pw, s.ph].every(positive) ||
-          s.pw > s.w || s.ph > s.h ||
+          s.pw > s.w ||
+          s.ph > s.h ||
           !["digital", "b2", "offset"].includes(s.group)
         ) {
           errors.push("Некорректный формат оборудования.");
         }
+
         sheetIds.add(s.id);
       }
 
@@ -587,26 +805,33 @@
           (
             !object(p.sheetPrices) ||
             !Object.entries(p.sheetPrices).every(
-              ([id, value]) => sheetIds.has(id) && nonnegative(value)
+              ([id, value]) =>
+                sheetIds.has(id) && nonnegative(value)
             )
           )
         ) {
-          errors.push("Проверьте цены материалов по форматам листов.");
+          errors.push("Проверьте цены материалов по форматам.");
         }
       }
     }
 
     for (const tier of Object.keys(TIERS)) {
       const geometry = c.calendar?.[tier];
+
       if (
         !geometry ||
-        ![geometry.w, geometry.headH, geometry.backingH].every(positive)
+        ![
+          geometry.w,
+          geometry.headH,
+          geometry.backingH
+        ].every(positive)
       ) {
         errors.push("Проверьте размеры календарей.");
       }
 
       for (const choice of ["economy", "standard", "premium"]) {
         const block = c.polimat?.[tier]?.[choice];
+
         if (!block?.name || !nonnegative(block.price)) {
           errors.push("Проверьте каталог календарных блоков.");
         }
@@ -614,7 +839,10 @@
     }
 
     for (const key of ["threeMini", "threeMidi"]) {
-      if (!c.polimat?.[key]?.name || !nonnegative(c.polimat[key].price)) {
+      if (
+        !c.polimat?.[key]?.name ||
+        !nonnegative(c.polimat[key].price)
+      ) {
         errors.push("Проверьте блоки календарей 3 в 1.");
       }
     }
@@ -624,14 +852,19 @@
     } else {
       for (const [id] of PRODUCTS) {
         const p = c.products[id];
+
         if (!p || !Array.isArray(p.components)) {
           errors.push("Не задано изделие: " + id);
           continue;
         }
 
-        for (const key of ["assembly", "assemblySetup", "accessories", "extra"]) {
+        for (const key of [
+          "assembly", "assemblySetup", "accessories", "extra"
+        ]) {
           if (!nonnegative(p[key])) {
-            errors.push("Некорректная стоимость: " + id + "." + key);
+            errors.push(
+              "Некорректная стоимость: " + id + "." + key
+            );
           }
         }
       }
@@ -647,7 +880,10 @@
   function makeComponent(c, spec = {}) {
     const paperId = spec.paper || c.component.paper;
     const material = c.papers[paperId];
-    if (!material) throw new Error("Не найден материал: " + paperId);
+
+    if (!material) {
+      throw new Error("Не найден материал: " + paperId);
+    }
 
     return {
       ...clone(c.component),
@@ -665,14 +901,21 @@
     }
 
     for (const p of o.components) {
-      if (!object(p)) throw new Error("Повреждён компонент заказа.");
+      if (!object(p)) {
+        throw new Error("Повреждён компонент заказа.");
+      }
+
       if (typeof p.plotter !== "boolean") p.plotter = false;
       if (!p.id) p.id = uid();
     }
 
     if (o.product === "tent") {
       if (!object(o.tent)) o.tent = { mounted: false };
-      if (!o.tent.format) o.tent.format = isNew ? "A5" : "custom";
+
+      if (!o.tent.format) {
+        o.tent.format = isNew ? "A5" : "custom";
+      }
+
       if (!o.tent.blockMode) o.tent.blockMode = "printed";
 
       if (!o.components.some(p => p.role === "cover")) {
@@ -702,7 +945,10 @@
 
   function baseOrder(id, c = current) {
     const p = c.products[id];
-    if (!p) throw new Error("Нет исходных настроек изделия: " + id);
+
+    if (!p) {
+      throw new Error("Нет исходных настроек изделия: " + id);
+    }
 
     return normalizeOrder({
       product: id,
@@ -712,6 +958,7 @@
       bookFormat: "A5",
       customBook: { w: 148, h: 210 },
       wall: { format: "A3", w: 297, h: 420 },
+
       bag: {
         a: 300,
         b: 400,
@@ -722,6 +969,7 @@
         includeStamp: false,
         outerContour: false
       },
+
       calendar: {
         size: "mini",
         tier: "mini",
@@ -731,12 +979,15 @@
         customHeadH: 210,
         customBackingH: 210
       },
+
       three: { size: "mini" },
+
       tent: {
         mounted: false,
         format: "A5",
         blockMode: "printed"
       },
+
       uv: {
         type: "adhesive",
         w: 1000,
@@ -746,8 +997,12 @@
         designerColor: "4+0",
         softTouch: false
       },
+
       ...clone(p),
-      components: p.components.map(spec => makeComponent(c, spec))
+
+      components: p.components.map(spec =>
+        makeComponent(c, spec)
+      )
     }, c, true);
   }
 
@@ -789,10 +1044,14 @@
 
   function bagLines(b) {
     const g = bagGeometry(b);
-    if (![b.a, b.b, b.c, g.width, g.height].every(positive)) return [];
+
+    if (![b.a, b.b, b.c, g.width, g.height].every(positive)) {
+      return [];
+    }
 
     const lines = [];
-    const add = (x1, y1, x2, y2) => lines.push({ x1, y1, x2, y2 });
+    const add = (x1, y1, x2, y2) =>
+      lines.push({ x1, y1, x2, y2 });
 
     const x1 = b.c / 2 - 1;
     const x2 = x1 + b.a;
@@ -802,7 +1061,9 @@
     const x6 = x5 + b.c / 2;
 
     const xs = [x1, x2, x3];
+
     if (g.type === "full") xs.push(x4, x5, x6);
+
     xs.forEach(x => add(x, 0, x, g.height));
 
     const y1 = 40;
@@ -815,7 +1076,10 @@
 
     const diagonal = (x, direction) => {
       const room = direction > 0 ? g.width - x : x;
-      const length = Math.max(0, Math.min(room, g.height - y3));
+      const length = Math.max(
+        0, Math.min(room, g.height - y3)
+      );
+
       add(x, y3, x + direction * length, y3 + length);
     };
 
@@ -833,18 +1097,25 @@
 
   function stampEstimate(b, c) {
     const g = bagGeometry(b);
+
     let millimeters = bagLines(b).reduce(
       (sum, line) =>
-        sum + Math.hypot(line.x2 - line.x1, line.y2 - line.y1),
+        sum + Math.hypot(
+          line.x2 - line.x1,
+          line.y2 - line.y1
+        ),
       0
     );
 
-    if (b.outerContour) millimeters += 2 * (g.width + g.height);
+    if (b.outerContour) {
+      millimeters += 2 * (g.width + g.height);
+    }
 
     return {
       meters: millimeters / 1000,
       cost: Math.ceil(
-        millimeters / 1000 * c.extra.stampMeter + c.extra.stampBase
+        millimeters / 1000 * c.extra.stampMeter +
+        c.extra.stampBase
       )
     };
   }
@@ -902,7 +1173,9 @@
       const tier = q.size === "custom" ? q.tier : q.size;
 
       if (!TIERS[tier] || !c.polimat[tier]?.[q.blockChoice]) {
-        throw new Error("Некорректные параметры квартального календаря.");
+        throw new Error(
+          "Некорректные параметры квартального календаря."
+        );
       }
 
       q.tier = tier;
@@ -925,22 +1198,34 @@
       const block = c.polimat[tier][q.blockChoice];
 
       d.assembly = c.extra[tierKey(tier, "Assembly")];
-      d.accessories = block.price + c.extra.quarterHardware +
+
+      d.accessories =
+        block.price +
+        c.extra.quarterHardware +
         (q.magnet ? c.extra[tierKey(tier, "Magnet")] : 0);
-      d.accessoriesNote = block.name +
+
+      d.accessoriesNote =
+        block.name +
         (q.magnet ? "; магнитный курсор" : "");
     }
 
     if (d.product === "threeinone") {
       const mini = d.three.size === "mini";
-      const block = c.polimat[mini ? "threeMini" : "threeMidi"];
+      const block = c.polimat[
+        mini ? "threeMini" : "threeMidi"
+      ];
 
       d.assembly = c.extra[
         mini ? "threeMiniAssembly" : "threeMidiAssembly"
       ];
+
       d.accessories += block.price;
-      d.accessoriesNote = block.name +
-        (source.accessoriesNote ? "; " + source.accessoriesNote : "");
+
+      d.accessoriesNote =
+        block.name +
+        (source.accessoriesNote
+          ? "; " + source.accessoriesNote
+          : "");
 
       if (d.components[0]) {
         Object.assign(d.components[0], {
@@ -959,16 +1244,21 @@
 
     if (d.product === "wall") {
       const f = FORMATS[d.wall.format] || d.wall;
+
       d.components.forEach(p => {
         p.w = f.w;
         p.h = f.h;
       });
+
       d.assembly = c.extra.wallAssembly;
     }
 
     if (d.product === "tent") {
       d.assembly = c.extra.tentAssembly;
-      if (d.tent.mounted) d.accessories += c.extra.tentMountedBase;
+
+      if (d.tent.mounted) {
+        d.accessories += c.extra.tentMountedBase;
+      }
 
       const mode = d.tent.blockMode || "printed";
       const format = d.tent.format || "custom";
@@ -977,11 +1267,18 @@
 
       if (purchased) {
         requireExtra(c, [
-          "tentPolimatBlock", "tentPolimatW", "tentPolimatH"
+          "tentPolimatBlock",
+          "tentPolimatW",
+          "tentPolimatH"
         ]);
 
-        if (![c.extra.tentPolimatW, c.extra.tentPolimatH].every(positive)) {
-          throw new Error("Некорректный размер покупного блока домика.");
+        if (![
+          c.extra.tentPolimatW,
+          c.extra.tentPolimatH
+        ].every(positive)) {
+          throw new Error(
+            "Некорректный размер покупного блока домика."
+          );
         }
 
         size = {
@@ -990,6 +1287,7 @@
         };
 
         d.accessories += c.extra.tentPolimatBlock;
+
         d.accessoriesNote = [
           d.accessoriesNote,
           `Покупной блок Полимат ${size.w}×${size.h} мм`
@@ -1017,9 +1315,15 @@
 
     if (isSticker(d)) {
       d.components.forEach(p => {
-        p.paper = p.material === "film" ? "adhesiveFilm" : "adhesive";
+        p.paper = p.material === "film"
+          ? "adhesiveFilm"
+          : "adhesive";
+
         p.color = "4+0";
-        if (d.product === "stickerpack") p.cutting = false;
+
+        if (d.product === "stickerpack") {
+          p.cutting = false;
+        }
       });
     }
 
@@ -1056,9 +1360,14 @@
   function validateOrder(d, c, options = {}) {
     const errors = [];
 
-    if (!product(d.product)) errors.push("Неизвестное изделие.");
+    if (!product(d.product)) {
+      errors.push("Неизвестное изделие.");
+    }
+
     if (!integer(d.quantity)) {
-      errors.push("Тираж должен быть целым положительным числом.");
+      errors.push(
+        "Тираж должен быть целым положительным числом."
+      );
     }
 
     if (d.product === "uvprint") {
@@ -1072,14 +1381,23 @@
         !["pens", "timedSheet"].includes(u.type) &&
         ![u.w, u.h].every(positive)
       ) {
-        errors.push("Укажите положительные размеры отпечатка.");
+        errors.push(
+          "Укажите положительные размеры отпечатка."
+        );
       }
 
       if (
         u.type === "custom" &&
-        fit(c.extra.uvBedW, c.extra.uvBedH, u.w, u.h) < 1
+        fit(
+          c.extra.uvBedW,
+          c.extra.uvBedH,
+          u.w,
+          u.h
+        ) < 1
       ) {
-        errors.push("Изделие не помещается на стол УФ-печати.");
+        errors.push(
+          "Изделие не помещается на стол УФ-печати."
+        );
       }
 
       if (!["items", "sheet"].includes(u.loading)) {
@@ -1093,9 +1411,13 @@
       return errors;
     }
 
-    for (const key of ["assembly", "assemblySetup", "accessories", "extra"]) {
+    for (const key of [
+      "assembly", "assemblySetup", "accessories", "extra"
+    ]) {
       if (!nonnegative(d[key])) {
-        errors.push("Проверьте сборку, комплектующие и прочие расходы.");
+        errors.push(
+          "Проверьте сборку, комплектующие и прочие расходы."
+        );
       }
     }
 
@@ -1104,7 +1426,9 @@
       d.components.length > 100 ||
       !d.components.some(p => p.enabled)
     ) {
-      errors.push("Нужен активный компонент. Максимум — 100 компонентов.");
+      errors.push(
+        "Нужен активный компонент. Максимум — 100 компонентов."
+      );
       return errors;
     }
 
@@ -1115,7 +1439,9 @@
         !["mini", "midi"].includes(d.three.size)
       )
     ) {
-      errors.push("Календарь 3 в 1: одна основа, размер мини или миди.");
+      errors.push(
+        "Календарь 3 в 1: одна основа, размер мини или миди."
+      );
     }
 
     if (d.product === "paket") {
@@ -1123,13 +1449,16 @@
 
       if (
         ![b.a, b.b, b.c].every(positive) ||
-        b.c < 2 || b.b < b.c / 2
+        b.c < 2 ||
+        b.b < b.c / 2
       ) {
         errors.push("Проверьте размеры пакета.");
       }
 
       if (!whole(b.extraSheets)) {
-        errors.push("Запас пакета должен быть целым неотрицательным.");
+        errors.push(
+          "Запас пакета должен быть целым неотрицательным."
+        );
       }
 
       if (!["half", "full"].includes(b.type)) {
@@ -1146,13 +1475,17 @@
         errors.push("Проверьте формат домика.");
       }
 
-      if (!["printed", "polimat", "polimatCover"].includes(d.tent.blockMode)) {
+      if (![
+        "printed", "polimat", "polimatCover"
+      ].includes(d.tent.blockMode)) {
         errors.push("Проверьте комплектацию домика.");
       }
 
       if (
         d.tent.blockMode === "polimatCover" &&
-        d.components.filter(p => p.role === "cover" && p.enabled).length !== 1
+        d.components.filter(
+          p => p.role === "cover" && p.enabled
+        ).length !== 1
       ) {
         errors.push("Нужна одна верхняя печатная обложка.");
       }
@@ -1171,12 +1504,16 @@
 
       if (d.product === "flyer" && !options.snapshot) {
         errors.push(
-          ...flyerMaterialErrors(p, c).map(text => prefix + text)
+          ...flyerMaterialErrors(p, c).map(
+            text => prefix + text
+          )
         );
       }
 
       if (!nonnegative(p.bleed) || !integer(p.setups)) {
-        errors.push(prefix + "проверьте вылеты и комплекты форм.");
+        errors.push(
+          prefix + "проверьте вылеты и комплекты форм."
+        );
       }
 
       if (!Object.hasOwn(SIDES, p.color)) {
@@ -1188,16 +1525,28 @@
       }
 
       if (p.mode === "pages") {
-        if (!integer(p.pages) || p.pages % 4 || SIDES[p.color] !== 2) {
-          errors.push(prefix + "полосы кратны четырём, печать двусторонняя.");
+        if (
+          !integer(p.pages) ||
+          p.pages % 4 ||
+          SIDES[p.color] !== 2
+        ) {
+          errors.push(
+            prefix +
+            "полосы кратны четырём, печать двусторонняя."
+          );
         }
       } else if (!integer(p.units)) {
-        errors.push(prefix + "число элементов должно быть целым положительным.");
+        errors.push(
+          prefix +
+          "число элементов должно быть целым положительным."
+        );
       }
 
       if (
         !["kg", "sheet"].includes(p.priceMode) ||
-        !nonnegative(p.priceMode === "kg" ? p.priceKg : p.priceSheet)
+        !nonnegative(
+          p.priceMode === "kg" ? p.priceKg : p.priceSheet
+        )
       ) {
         errors.push(prefix + "проверьте цену бумаги.");
       }
@@ -1224,20 +1573,33 @@
         errors.push(prefix + "проверьте клише.");
       }
 
-      if (isSticker(d) && !["paper", "film"].includes(p.material)) {
+      if (
+        isSticker(d) &&
+        !["paper", "film"].includes(p.material)
+      ) {
         errors.push(prefix + "проверьте материал самоклейки.");
       }
 
       if (d.product === "flyer" && p.plotter) {
         if (p.mode !== "units") {
-          errors.push(prefix + "плоттер работает с элементами, не с полосами.");
+          errors.push(
+            prefix +
+            "плоттер работает с элементами, не с полосами."
+          );
         }
+
         if (p.diecut) {
-          errors.push(prefix + "выберите плоттер или вырубку, не обе операции.");
+          errors.push(
+            prefix +
+            "выберите плоттер или вырубку, не обе операции."
+          );
         }
       }
 
-      const units = p.mode === "pages" ? p.pages / 4 : p.units;
+      const units = p.mode === "pages"
+        ? p.pages / 4
+        : p.units;
+
       if (!Number.isSafeInteger(units * d.quantity)) {
         errors.push(prefix + "слишком большой тираж.");
       }
@@ -1267,6 +1629,7 @@
     for (const [sw, sh] of [[320, 450], [450, 320]]) {
       const cols = Math.floor(sheet.w / sw);
       const rows = Math.floor(sheet.h / sh);
+
       if (!cols || !rows) continue;
 
       const freeW = sheet.w - cols * sw;
@@ -1286,13 +1649,16 @@
 
               const w =
                 Math.min(sx + sw - margin, right) - workX;
+
               const h =
                 Math.min(sy + sh - margin, bottom) - workY;
 
               const count = fit(w, h, iw, ih);
+
               if (!count) continue;
 
               counts.push(count);
+
               plan.push({
                 sx, sy, sw, sh,
                 x: workX,
@@ -1326,11 +1692,14 @@
   }
 
   // ============================================================
-  // РАСКЛАДКА ПЕЧАТНОГО КОМПОНЕНТА
+  // РАСКЛАДКА КОМПОНЕНТА
   // ============================================================
 
   function layout(p, sheet, d, c) {
-    const units = p.mode === "pages" ? p.pages / 4 : p.units;
+    const units = p.mode === "pages"
+      ? p.pages / 4
+      : p.units;
+
     const elements = units * d.quantity;
 
     let capacity = 0;
@@ -1346,12 +1715,16 @@
         }
 
         if (!fit(
-          sheet.pw, sheet.ph,
+          sheet.pw,
+          sheet.ph,
           p.w + 2 * p.bleed,
           p.h + 2 * p.bleed
         )) {
-          throw new Error("А3 с вылетами не помещается в печатную зону.");
+          throw new Error(
+            "А3 с вылетами не помещается в печатную зону."
+          );
         }
+
         capacity = 1;
       } else {
         if (!["E", "M"].includes(sheet.id)) {
@@ -1359,6 +1732,7 @@
         }
 
         capacity = 2;
+
         warning =
           "Миди 3 в 1: две основы на лист 520×720. " +
           "Размер 360×520 — половина физического листа. " +
@@ -1373,23 +1747,28 @@
 
       if (g.rule) {
         if (!g.rule.allowed.includes(sheet.id)) {
-          throw new Error("Для стандарта закреплён лист " + g.rule.label + ".");
+          throw new Error(
+            "Для стандарта закреплён лист " + g.rule.label + "."
+          );
         }
 
         if (!fit(sheet.w, sheet.h, w, h)) {
-          throw new Error("Развёртка не помещается на физическом листе.");
+          throw new Error(
+            "Развёртка не помещается на физическом листе."
+          );
         }
 
         if (!fit(sheet.pw, sheet.ph, w, h)) {
           if (!d.bag.confirmPhysical) {
             throw new Error(
-              "Нужно подтверждение технолога: выход за стандартную печатную зону."
+              "Нужно подтверждение технолога: " +
+              "выход за стандартную печатную зону."
             );
           }
 
           warning =
-            "Размещение вне стандартной печатной зоны разрешено " +
-            "по подтверждению технолога.";
+            "Размещение вне стандартной печатной зоны " +
+            "разрешено по подтверждению технолога.";
         }
 
         capacity = 1;
@@ -1425,8 +1804,11 @@
 
       if (capacity && brochure) {
         forms = Math.ceil(units / capacity);
+
         const last = units - (forms - 1) * capacity;
-        const repeats = Math.max(1, Math.floor(capacity / last));
+        const repeats = Math.max(
+          1, Math.floor(capacity / last)
+        );
 
         baseSheets =
           (forms - 1) * d.quantity +
@@ -1441,8 +1823,13 @@
     }
 
     return {
-      units, elements, capacity, forms,
-      baseSheets, sections, warning
+      units,
+      elements,
+      capacity,
+      forms,
+      baseSheets,
+      sections,
+      warning
     };
   }
 
@@ -1458,11 +1845,14 @@
     const l = layout(p, sheet, d, c);
     const r = c.rates;
     const e = c.extra;
+
     const printed = SIDES[p.color] > 0;
     const formCount = printed ? l.forms : 0;
     const isOffset = sheet.group === "offset";
 
-    let setupRate = printed && isOffset ? r.offsetSetup : 0;
+    let setupRate = printed && isOffset
+      ? r.offsetSetup
+      : 0;
 
     if (printed && isOffset && d.product === "bloknot") {
       const key = {
@@ -1476,9 +1866,11 @@
     }
 
     if (
-      printed && isOffset &&
+      printed &&
+      isOffset &&
       d.product === "broshyura" &&
-      p.color === "4+4" && formCount >= 2
+      p.color === "4+4" &&
+      formCount >= 2
     ) {
       setupRate = c.policy[
         formCount === 2
@@ -1498,13 +1890,18 @@
     }
 
     if (
-      sheet.id === "E" && printed &&
-      (["paket", "papka", "diecut"].includes(d.product) || p.diecut)
+      sheet.id === "E" &&
+      printed &&
+      (
+        ["paket", "papka", "diecut"].includes(d.product) ||
+        p.diecut
+      )
     ) {
       spoil += e.b2ExtraSheets * formCount;
     }
 
     const sheets = l.baseSheets + spoil;
+
     if (!integer(sheets)) {
       throw new Error("Некорректное количество листов.");
     }
@@ -1512,7 +1909,11 @@
     const paperPerSheet = flyerMaterialCost ?? (
       isSticker(d)
         ? sheet.w * sheet.h / 1000000 *
-          (p.material === "film" ? e.stickerFilmM2 : e.stickerPaperM2)
+          (
+            p.material === "film"
+              ? e.stickerFilmM2
+              : e.stickerPaperM2
+          )
         : p.priceMode === "sheet"
           ? p.priceSheet
           : sheet.w * sheet.h / 1000000 *
@@ -1520,10 +1921,13 @@
     );
 
     const rows = {};
+
     rows.paper = sheets * paperPerSheet;
+
     rows.printRun = printed
       ? sheets * SIDES[p.color] * r[sheet.group + "Print"]
       : 0;
+
     rows.setup = formCount * setupRate;
 
     rows.cutting = p.cutting && d.product !== "stickerpack"
@@ -1535,11 +1939,13 @@
       : r.lamination;
 
     rows.lamination = p.lamination !== "none"
-      ? sheets * p.lamSides * laminationRate + r.laminationSetup
+      ? sheets * p.lamSides * laminationRate +
+        r.laminationSetup
       : 0;
 
     rows.score = p.score
-      ? l.elements * p.scoreCount * r.score + r.scoreSetup
+      ? l.elements * p.scoreCount * r.score +
+        r.scoreSetup
       : 0;
 
     rows.folding = p.folding
@@ -1551,19 +1957,24 @@
         r.diecutSetup + p.stamp
       : 0;
 
-    rows.uv = p.uv ? sheets * r.uv + r.uvSetup : 0;
+    rows.uv = p.uv
+      ? sheets * r.uv + r.uvSetup
+      : 0;
 
     rows.emboss = p.emboss
-      ? l.elements * r.emboss + r.embossSetup + p.plate
+      ? l.elements * r.emboss +
+        r.embossSetup + p.plate
       : 0;
 
     let plotterSheets = 0;
 
     if (l.sections) {
       plotterSheets =
-        Math.floor(l.elements / l.capacity) * l.sections.length;
+        Math.floor(l.elements / l.capacity) *
+        l.sections.length;
 
       let rest = l.elements % l.capacity;
+
       for (const sectionCapacity of l.sections) {
         if (rest <= 0) break;
         plotterSheets++;
@@ -1571,14 +1982,19 @@
       }
     }
 
-    const flyerPlotter = d.product === "flyer" && p.plotter;
+    const flyerPlotter =
+      d.product === "flyer" && p.plotter;
+
     const plotterRate = flyerPlotter
       ? e.flyerPlotterSheet
       : e.plotterSheet;
 
     rows.plotter = plotterSheets * plotterRate;
 
-    const total = Object.values(rows).reduce((a, b) => a + b, 0);
+    const total = Object.values(rows).reduce(
+      (a, b) => a + b, 0
+    );
+
     if (!validCost(total)) {
       throw new Error("Некорректная стоимость компонента.");
     }
@@ -1608,6 +2024,7 @@
 
   function calculateMethods(d, c) {
     const active = d.components.filter(p => p.enabled);
+
     const hybrid =
       d.product === "bloknot" &&
       c.hybrid &&
@@ -1617,7 +2034,9 @@
     const cache = new Map();
 
     if (hybrid) {
-      for (const p of active.filter(item => digitalRoles.includes(item.role))) {
+      for (const p of active.filter(
+        item => digitalRoles.includes(item.role)
+      )) {
         const variants = c.sheets
           .filter(s => ["Z", "E"].includes(s.id))
           .flatMap(s => {
@@ -1628,12 +2047,16 @@
             }
           });
 
-        cache.set(p.id, variants.sort((a, b) => a.total - b.total)[0]);
+        cache.set(
+          p.id,
+          variants.sort((a, b) => a.total - b.total)[0]
+        );
       }
     }
 
     const allDigital =
-      hybrid && active.every(p => digitalRoles.includes(p.role));
+      hybrid &&
+      active.every(p => digitalRoles.includes(p.role));
 
     const sheets = allDigital
       ? [c.sheets.find(s => s.id === "Z")]
@@ -1641,19 +2064,26 @@
 
     return sheets.map(sheet => {
       const id = allDigital ? "HYBRID" : sheet.id;
+
       const label = allDigital
         ? "Цифровые обложка и подложка"
         : hybrid
-          ? sheet.label + " для блока + цифровые обложка/подложка"
+          ? sheet.label +
+            " для блока + цифровые обложка/подложка"
           : sheet.label;
 
       try {
         const parts = active.map(p => {
           if (hybrid && digitalRoles.includes(p.role)) {
             const cached = cache.get(p.id);
+
             if (!cached) {
-              throw new Error(p.name + ": не помещается на цифровые форматы.");
+              throw new Error(
+                p.name +
+                ": не помещается на цифровые форматы."
+              );
             }
+
             return clone(cached);
           }
 
@@ -1682,34 +2112,46 @@
           }
         }
 
-        const assembly = d.quantity * d.assembly + d.assemblySetup;
-        const accessories = d.quantity * d.accessories;
+        const assembly =
+          d.quantity * d.assembly + d.assemblySetup;
+
+        const accessories =
+          d.quantity * d.accessories;
+
         const cost =
           parts.reduce((sum, p) => sum + p.total, 0) +
           assembly + accessories + d.extra;
 
-        const price = roundUp(
-          cost * (1 + c.markup / 100),
-          c.rates.rounding
-        );
-
-        if (!validCost(cost) || !validCost(price)) {
-          throw new Error("Слишком большая стоимость.");
-        }
+        const pricing = calculateSellingPrice(cost, c);
 
         return {
-          id, label, valid: true,
-          parts, assembly, accessories,
+          id,
+          label,
+          valid: true,
+          parts,
+          assembly,
+          accessories,
           extra: d.extra,
-          cost, price,
-          unitPrice: price / d.quantity,
-          profit: price - cost,
+          cost,
+          price: pricing.price,
+          unitPrice: pricing.price / d.quantity,
+          profit: pricing.profit,
+          markupPercent: pricing.markupPercent,
+          markupAmount: pricing.markupAmount,
+          rawPrice: pricing.rawPrice,
+          pricingMode: pricing.pricingMode,
           hybrid,
-          warnings: [...new Set(parts.map(p => p.warning).filter(Boolean))]
+          warnings: [
+            ...new Set(
+              parts.map(p => p.warning).filter(Boolean)
+            )
+          ]
         };
       } catch (error) {
         return {
-          id, label, valid: false,
+          id,
+          label,
+          valid: false,
           reason: error.message
         };
       }
@@ -1717,7 +2159,7 @@
   }
 
   // ============================================================
-  // УФ-ПЕЧАТЬ
+  // УФ-ПЕЧАТЬ — ПРОДАЖНЫЕ ТАРИФЫ БЕЗ НАЦЕНКИ
   // ============================================================
 
   function calculateUV(d, c) {
@@ -1726,12 +2168,19 @@
     const q = d.quantity;
     const area = u.w * u.h * q / 1000000;
     const rows = [];
+
     let total = 0;
     let info = "";
-    const label = UV_TYPES.find(([id]) => id === u.type)[1];
+
+    const label = UV_TYPES.find(
+      ([id]) => id === u.type
+    )[1];
 
     if (u.type === "adhesive") {
-      const rate = u.white ? e.uvAdhesiveWhite : e.uvAdhesive;
+      const rate = u.white
+        ? e.uvAdhesiveWhite
+        : e.uvAdhesive;
+
       total = area * rate + e.uvAdhesiveSetup;
 
       rows.push(
@@ -1740,7 +2189,8 @@
         ["Настройка", money(e.uvAdhesiveSetup)]
       );
 
-      info = "Включение материала в тариф подтвердите у исполнителя.";
+      info =
+        "Включение материала в тариф подтвердите у исполнителя.";
     } else if (u.type === "pens") {
       total = q * e.uvPen + e.uvPenSetup;
 
@@ -1754,6 +2204,7 @@
       const printMinutes = u.white
         ? e.uvSheetPrintWhite
         : e.uvSheetPrint;
+
       const printing = q * printMinutes;
       const loading = q * e.uvSheetLoading;
 
@@ -1803,6 +2254,7 @@
         "Материал, изделия и оснастка не включены.";
     } else {
       const designer = u.type === "designer300";
+
       const rate = designer
         ? e[
           "uvDesigner" +
@@ -1829,7 +2281,9 @@
         "Тариф 4+4 уже включает обе стороны.";
     }
 
+    // УФ сохраняет округление до копеек.
     const price = roundUp(total, 0);
+
     if (!validCost(price)) {
       throw new Error("Некорректная стоимость УФ-печати.");
     }
@@ -1867,7 +2321,8 @@
           type="${options.text ? "text" : "number"}"
           value="${esc(displayed)}"
           ${options.text ? "" :
-            `min="${options.min ?? 0}" step="${options.step ?? "any"}"`}
+            `min="${options.min ?? 0}"
+             step="${options.step ?? "any"}"`}
           ${options.disabled ? "disabled" : ""}
         >
       </label>
@@ -1927,11 +2382,16 @@
   function tableRows(rows) {
     return `
       <div class="table-scroll">
-        <table><tbody>
-          ${rows.map(([label, value]) => `
-            <tr><td>${esc(label)}</td><td>${esc(value)}</td></tr>
-          `).join("")}
-        </tbody></table>
+        <table>
+          <tbody>
+            ${rows.map(([label, value]) => `
+              <tr>
+                <td>${esc(label)}</td>
+                <td>${esc(value)}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
       </div>
     `;
   }
@@ -1949,19 +2409,25 @@
     const densities = c.papers[p.paper]?.densities;
 
     if (!Array.isArray(densities) || !densities.length) {
-      return input("Плотность, г/м²", path, p.density, { min: 1 });
+      return input(
+        "Плотность, г/м²", path, p.density, { min: 1 }
+      );
     }
 
-    const choices = densities.map(value => [value, String(value)]);
+    const choices = densities.map(
+      value => [value, String(value)]
+    );
 
-    if (!densities.includes(p.density)) {
+    const valid = densities.includes(p.density);
+
+    if (!valid) {
       choices.unshift(["", "Выберите допустимую плотность"]);
     }
 
     return select(
       "Плотность, г/м²",
       path,
-      densities.includes(p.density) ? p.density : "",
+      valid ? p.density : "",
       choices,
       { numeric: true }
     );
@@ -1977,14 +2443,19 @@
     $("productNav").innerHTML = groups.map(group => `
       <div class="nav-group">
         <div class="nav-title">${esc(group)}</div>
+
         ${PRODUCTS.filter(p => p[2] === group).map(p => `
           <button
-            class="nav-item ${order.product === p[0] ? "active" : ""}"
+            class="nav-item ${
+              order.product === p[0] ? "active" : ""
+            }"
             data-action="product"
             data-id="${p[0]}"
             ${order.product === p[0] ? 'aria-current="page"' : ""}
           >
-            <span class="nav-symbol" aria-hidden="true">${p[3]}</span>
+            <span class="nav-symbol" aria-hidden="true">
+              ${p[3]}
+            </span>
             ${esc(p[1])}
           </button>
         `).join("")}
@@ -2021,16 +2492,20 @@
     let html = `
       <div class="fields">
         ${input("Название заказа", "name", o.name, {
-          text: true, full: true
+          text: true,
+          full: true
         })}
+
         ${input(
           o.product === "uvprint"
             ? "Количество изделий / листов"
             : "Тираж готовых изделий",
-          "quantity", o.quantity,
+          "quantity",
+          o.quantity,
           { min: 1, step: 1, full: true }
         )}
       </div>
+
       <div class="quick">
         ${(o.product === "uvprint"
           ? [1, 10, 50, 100, 500]
@@ -2048,14 +2523,24 @@
     if (isBook(o)) {
       html += `
         <h3>Единый готовый формат</h3>
+
         ${quickFormat("book", o.bookFormat, [
-          ["A6", "А6"], ["A5", "А5"], ["A4", "А4"],
+          ["A6", "А6"],
+          ["A5", "А5"],
+          ["A4", "А4"],
           ["CUSTOM", "Свой размер"]
         ])}
+
         ${o.bookFormat === "CUSTOM" ? `
           <div class="fields">
-            ${input("Ширина, мм", "customBook.w", o.customBook.w, { min: 1 })}
-            ${input("Высота, мм", "customBook.h", o.customBook.h, { min: 1 })}
+            ${input(
+              "Ширина, мм", "customBook.w",
+              o.customBook.w, { min: 1 }
+            )}
+            ${input(
+              "Высота, мм", "customBook.h",
+              o.customBook.h, { min: 1 }
+            )}
           </div>
         ` : ""}
       `;
@@ -2063,14 +2548,22 @@
 
     if (o.product === "wall") {
       html += quickFormat("wall", o.wall.format, [
-        ["A3", "А3"], ["A2", "А2"], ["custom", "Свой размер"]
+        ["A3", "А3"],
+        ["A2", "А2"],
+        ["custom", "Свой размер"]
       ]);
 
       if (o.wall.format === "custom") {
         html += `
           <div class="fields">
-            ${input("Ширина, мм", "wall.w", o.wall.w, { min: 1 })}
-            ${input("Высота, мм", "wall.h", o.wall.h, { min: 1 })}
+            ${input(
+              "Ширина, мм", "wall.w",
+              o.wall.w, { min: 1 }
+            )}
+            ${input(
+              "Высота, мм", "wall.h",
+              o.wall.h, { min: 1 }
+            )}
           </div>
         `;
       }
@@ -2082,37 +2575,60 @@
 
       html += `
         <h3>Готовый пакет</h3>
+
         <div class="quick">
-          <button data-action="bag-preset" data-value="large">30×40×12 см</button>
-          <button data-action="bag-preset" data-value="small">25×35×10 см</button>
+          <button data-action="bag-preset" data-value="large">
+            30×40×12 см
+          </button>
+          <button data-action="bag-preset" data-value="small">
+            25×35×10 см
+          </button>
         </div>
+
         <div class="fields">
           ${input("Ширина A, мм", "bag.a", b.a, { min: 1 })}
           ${input("Высота B, мм", "bag.b", b.b, { min: 1 })}
           ${input("Глубина C, мм", "bag.c", b.c, { min: 2 })}
+
           ${select(
-            "Конструкция", "bag.type", rule?.type || b.type,
-            [["half", "Две половинки"], ["full", "Цельная развёртка"]],
+            "Конструкция",
+            "bag.type",
+            rule?.type || b.type,
+            [
+              ["half", "Две половинки"],
+              ["full", "Цельная развёртка"]
+            ],
             { disabled: !!rule }
           )}
+
           ${pro ? input(
-            "Техзапас на заказ, листов", "bag.extraSheets", b.extraSheets,
+            "Техзапас на заказ, листов",
+            "bag.extraSheets",
+            b.extraSheets,
             { step: 1, full: true }
           ) : ""}
         </div>
+
         ${pro ? `
           <div class="checks">
             ${check(
               "Размещение на физическом листе подтверждено технологом",
-              "bag.confirmPhysical", b.confirmPhysical
+              "bag.confirmPhysical",
+              b.confirmPhysical
             )}
-            ${check("Включить новый штамп", "bag.includeStamp", b.includeStamp)}
+            ${check(
+              "Включить новый штамп",
+              "bag.includeStamp",
+              b.includeStamp
+            )}
             ${check(
               "Внешний контур в оценке штампа",
-              "bag.outerContour", b.outerContour
+              "bag.outerContour",
+              b.outerContour
             )}
           </div>
         ` : ""}
+
         <div id="bagPreview"></div>
       `;
     }
@@ -2122,30 +2638,57 @@
       const tier = q.size === "custom" ? q.tier : q.size;
 
       html += quickFormat("quarter", q.size, [
-        ["mini", "Мини"], ["midi", "Миди"],
-        ["maxi", "Макси"], ["custom", "Свой размер"]
+        ["mini", "Мини"],
+        ["midi", "Миди"],
+        ["maxi", "Макси"],
+        ["custom", "Свой размер"]
       ]);
 
       html += `
         <div class="fields">
           ${q.size === "custom" ? `
-            ${select("Класс блоков", "calendar.tier", q.tier, Object.entries(TIERS))}
-            ${input("Ширина, мм", "calendar.customW", q.customW, { min: 1 })}
-            ${input("Высота шапки, мм", "calendar.customHeadH", q.customHeadH, { min: 1 })}
-            ${input("Высота подложки, мм", "calendar.customBackingH", q.customBackingH, { min: 1 })}
+            ${select(
+              "Класс блоков", "calendar.tier",
+              q.tier, Object.entries(TIERS)
+            )}
+            ${input(
+              "Ширина, мм", "calendar.customW",
+              q.customW, { min: 1 }
+            )}
+            ${input(
+              "Высота шапки, мм", "calendar.customHeadH",
+              q.customHeadH, { min: 1 }
+            )}
+            ${input(
+              "Высота подложки, мм",
+              "calendar.customBackingH",
+              q.customBackingH,
+              { min: 1 }
+            )}
           ` : ""}
+
           ${select(
             "Покупной комплект блоков",
-            "calendar.blockChoice", q.blockChoice,
+            "calendar.blockChoice",
+            q.blockChoice,
             ["economy", "standard", "premium"].map(key => {
               const b = cfg.polimat[tier][key];
-              return [key, b.name + (pro ? " — " + money(b.price) : "")];
+
+              return [
+                key,
+                b.name + (pro ? " — " + money(b.price) : "")
+              ];
             }),
             { full: true }
           )}
         </div>
+
         <div class="checks">
-          ${check("Магнитный курсор", "calendar.magnet", q.magnet)}
+          ${check(
+            "Магнитный курсор",
+            "calendar.magnet",
+            q.magnet
+          )}
         </div>
       `;
     }
@@ -2154,11 +2697,17 @@
       html += `
         <div class="fields">
           ${select(
-            "Размер календаря", "three.size", o.three.size,
-            [["mini", "Мини — основа А3"], ["midi", "Миди — две основы на B2"]],
+            "Размер календаря",
+            "three.size",
+            o.three.size,
+            [
+              ["mini", "Мини — основа А3"],
+              ["midi", "Миди — две основы на B2"]
+            ],
             { full: true }
           )}
         </div>
+
         <p class="small section-gap">
           Покупной блок и сборка добавляются на каждый календарь.
           Для миди печатное поле необходимо проверить.
@@ -2169,6 +2718,7 @@
     if (o.product === "tent") {
       const purchased = o.tent.blockMode !== "printed";
       const e = cfg.extra;
+
       const configured =
         positive(e.tentPolimatW) &&
         positive(e.tentPolimatH) &&
@@ -2176,9 +2726,12 @@
 
       html += `
         <h3>Комплектация домика</h3>
+
         <div class="fields section-gap">
           ${select(
-            "Блок календаря", "tent.blockMode", o.tent.blockMode,
+            "Блок календаря",
+            "tent.blockMode",
+            o.tent.blockMode,
             [
               ["printed", "Собственные перекидные листы"],
               ["polimat", "Стандартный блок Полимат"],
@@ -2186,8 +2739,11 @@
             ],
             { full: true }
           )}
+
           ${!purchased ? select(
-            "Формат перекидных листов", "tent.format", o.tent.format,
+            "Формат перекидных листов",
+            "tent.format",
+            o.tent.format,
             [
               ["A5", "А5 альбомный — 210×148 мм"],
               ["square", "Квадрат — 205×205 мм"],
@@ -2196,17 +2752,29 @@
             { full: true }
           ) : ""}
         </div>
+
         <div class="checks">
-          ${check("Кашированное основание", "tent.mounted", o.tent.mounted)}
+          ${check(
+            "Кашированное основание",
+            "tent.mounted",
+            o.tent.mounted
+          )}
         </div>
+
         ${purchased ? `
           <div class="notice section-gap">
             ${configured
               ? `Один покупной блок:
-                <strong>${num(e.tentPolimatW)}×${num(e.tentPolimatH)} мм</strong>,
-                <strong>${money(e.tentPolimatBlock)} за календарь</strong>.`
-              : "В тарифах не задан покупной блок домика. Примените текущие тарифы."}
+                <strong>
+                  ${num(e.tentPolimatW)}×${num(e.tentPolimatH)} мм
+                </strong>,
+                <strong>
+                  ${money(e.tentPolimatBlock)} за календарь
+                </strong>.`
+              : "В тарифах не задан покупной блок домика. " +
+                "Примените текущие тарифы."}
           </div>
+
           <p class="small">
             Печать покупного блока повторно не начисляется.
             ${o.tent.blockMode === "polimatCover"
@@ -2214,10 +2782,12 @@
               : "Печатная верхняя обложка не включена."}
           </p>
         ` : ""}
+
         <p class="small section-gap">
           Формат относится к перекидным листам.
           Основание задаётся отдельно в развёртке.
-          Совместимость основания, блока и крепления проверьте по макету.
+          Совместимость основания, блока и крепления
+          проверьте по макету.
         </p>
       `;
     }
@@ -2227,30 +2797,58 @@
 
       html += `
         <div class="fields">
-          ${select("Вид УФ-печати", "uv.type", u.type, UV_TYPES, { full: true })}
+          ${select(
+            "Вид УФ-печати",
+            "uv.type",
+            u.type,
+            UV_TYPES,
+            { full: true }
+          )}
+
           ${!["pens", "timedSheet"].includes(u.type) ? `
-            ${input("Ширина отпечатка / изделия, мм", "uv.w", u.w, { min: 1 })}
-            ${input("Высота отпечатка / изделия, мм", "uv.h", u.h, { min: 1 })}
+            ${input(
+              "Ширина отпечатка / изделия, мм",
+              "uv.w", u.w, { min: 1 }
+            )}
+            ${input(
+              "Высота отпечатка / изделия, мм",
+              "uv.h", u.h, { min: 1 }
+            )}
           ` : ""}
+
           ${u.type === "custom" ? select(
-            "Загрузка", "uv.loading", u.loading,
-            [["items", "Отдельные изделия"], ["sheet", "Один лист за цикл"]],
+            "Загрузка",
+            "uv.loading",
+            u.loading,
+            [
+              ["items", "Отдельные изделия"],
+              ["sheet", "Один лист за цикл"]
+            ],
             { full: true }
           ) : ""}
+
           ${u.type === "designer300" ? select(
-            "Цветность", "uv.designerColor", u.designerColor,
-            [["4+0", "4+0 — одна сторона"], ["4+4", "4+4 — две стороны"]],
+            "Цветность",
+            "uv.designerColor",
+            u.designerColor,
+            [
+              ["4+0", "4+0 — одна сторона"],
+              ["4+4", "4+4 — две стороны"]
+            ],
             { full: true }
           ) : ""}
         </div>
+
         <div class="checks">
           ${!["pens", "pvc3"].includes(u.type)
             ? check("С белилами", "uv.white", u.white)
             : ""}
+
           ${u.type === "designer300"
             ? check("Софт-тач", "uv.softTouch", u.softTouch)
             : ""}
         </div>
+
         ${u.type === "timedSheet" ? `
           <p class="small section-gap">
             Фиксированный лист 500×700 мм, одна сторона.
@@ -2269,19 +2867,30 @@
   // ============================================================
 
   function lockedSize(o, p) {
-    if (o.product === "tent" && ["block", "cover"].includes(p.role)) {
-      return o.tent.blockMode !== "printed" || o.tent.format !== "custom";
+    if (
+      o.product === "tent" &&
+      ["block", "cover"].includes(p.role)
+    ) {
+      return (
+        o.tent.blockMode !== "printed" ||
+        o.tent.format !== "custom"
+      );
     }
 
-    return isBook(o) ||
+    return (
+      isBook(o) ||
       ["quarter", "wall", "threeinone"].includes(o.product) ||
-      (o.product === "paket" && p.role === "bag");
+      (o.product === "paket" && p.role === "bag")
+    );
   }
 
   function managedTentComponent(o, p) {
     return o.product === "tent" && (
       p.role === "cover" ||
-      (p.role === "block" && o.tent.blockMode !== "printed")
+      (
+        p.role === "block" &&
+        o.tent.blockMode !== "printed"
+      )
     );
   }
 
@@ -2291,6 +2900,7 @@
     return `
       <div class="section-gap">
         <h3>Стандартный размер</h3>
+
         <div class="quick">
           ${FLYER_FORMATS.map(format => {
             const active =
@@ -2310,7 +2920,9 @@
             `;
           }).join("")}
         </div>
+
         <h3>Плотность бумаги, г/м²</h3>
+
         <div class="quick">
           ${flyerDensities(p, cfg).map(density => `
             <button
@@ -2329,13 +2941,16 @@
 
   function renderComponents() {
     const advanced = advancedComponents();
+
     $("componentsCard").hidden = order.product === "uvprint";
+
     $("addComponent").hidden =
       !advanced || order.product === "threeinone";
 
     if (order.product === "uvprint") return;
 
     let d;
+
     try {
       d = derive(order, cfg);
     } catch {
@@ -2353,19 +2968,30 @@
     html += d.components.map((p, i) => {
       const original = order.components[i];
       const path = key => `components.${i}.${key}`;
-      const core = d.product === "threeinone" ||
+
+      const core =
+        d.product === "threeinone" ||
         (d.product === "paket" && p.role === "bag");
+
       const managed = managedTentComponent(order, p);
       const locked = lockedSize(order, p);
 
       if (order.product === "tent") {
-        if (p.role === "block" && order.tent.blockMode !== "printed") return "";
-        if (p.role === "cover" && order.tent.blockMode !== "polimatCover") return "";
+        if (
+          p.role === "block" &&
+          order.tent.blockMode !== "printed"
+        ) return "";
+
+        if (
+          p.role === "cover" &&
+          order.tent.blockMode !== "polimatCover"
+        ) return "";
       }
 
       const paperChoices = Object.entries(cfg.papers)
         .filter(([key]) =>
-          order.product !== "flyer" || key !== "adhesiveFilm"
+          order.product !== "flyer" ||
+          key !== "adhesiveFilm"
         )
         .map(([key, value]) => [key, value.label]);
 
@@ -2374,13 +3000,17 @@
         p.paper === "adhesiveFilm";
 
       if (unavailableFilm) {
-        paperChoices.unshift(["", "Выберите доступный материал"]);
+        paperChoices.unshift([
+          "", "Выберите доступный материал"
+        ]);
       }
 
       const flyerPlotter =
         order.product === "flyer" && original.plotter;
+
       const fixedPrice =
         order.product === "flyer" && flyerCatalogPrice(p);
+
       const tariffText = order.product === "flyer"
         ? flyerTariffText(p, cfg)
         : "";
@@ -2396,11 +3026,14 @@
                   ${p.enabled ? "checked" : ""}
                   ${core || managed ? "disabled" : ""}
                 >
-                <h3>${esc(p.name)}</h3>
+                <strong>${esc(p.name)}</strong>
               </label>
             ` : `
-              <h3>${esc(p.name)}${p.enabled ? "" : " · отключён"}</h3>
+              <h3>
+                ${esc(p.name)}${p.enabled ? "" : " · отключён"}
+              </h3>
             `}
+
             ${advanced && !core && !managed ? `
               <button
                 class="text-button danger"
@@ -2415,8 +3048,14 @@
 
             <div class="fields">
               ${!locked ? `
-                ${input("Ширина по макету, мм", path("w"), p.w, { min: 1 })}
-                ${input("Высота по макету, мм", path("h"), p.h, { min: 1 })}
+                ${input(
+                  "Ширина по макету, мм",
+                  path("w"), p.w, { min: 1 }
+                )}
+                ${input(
+                  "Высота по макету, мм",
+                  path("h"), p.h, { min: 1 }
+                )}
               ` : `
                 <p class="small full">
                   Размер: ${num(p.w)}×${num(p.h)} мм
@@ -2424,23 +3063,40 @@
               `}
 
               ${p.mode === "pages"
-                ? input("Полос без обложки", path("pages"), p.pages, {
-                  min: 4, step: 4
-                })
+                ? input(
+                  "Полос без обложки",
+                  path("pages"),
+                  p.pages,
+                  { min: 4, step: 4 }
+                )
                 : !core
-                  ? input("Элементов на изделие", path("units"), p.units, {
-                    min: 1, step: 1,
-                    disabled: order.product === "tent" && p.role === "cover"
-                  })
+                  ? input(
+                    "Элементов на изделие",
+                    path("units"),
+                    p.units,
+                    {
+                      min: 1,
+                      step: 1,
+                      disabled:
+                        order.product === "tent" &&
+                        p.role === "cover"
+                    }
+                  )
                   : ""}
 
               ${isSticker(d)
-                ? select("Материал", path("material"), p.material, [
-                  ["paper", "Бумажная самоклейка"],
-                  ["film", "Самоклеящаяся плёнка"]
-                ])
+                ? select(
+                  "Материал",
+                  path("material"),
+                  p.material,
+                  [
+                    ["paper", "Бумажная самоклейка"],
+                    ["film", "Самоклеящаяся плёнка"]
+                  ]
+                )
                 : select(
-                  "Бумага", path("paper"),
+                  "Бумага",
+                  path("paper"),
                   unavailableFilm ? "" : p.paper,
                   paperChoices
                 )}
@@ -2448,28 +3104,47 @@
               ${!isSticker(d)
                 ? d.product === "flyer"
                   ? flyerDensityField(p, path("density"), cfg)
-                  : input("Плотность, г/м²", path("density"), p.density, { min: 1 })
+                  : input(
+                    "Плотность, г/м²",
+                    path("density"),
+                    p.density,
+                    { min: 1 }
+                  )
                 : ""}
 
               ${!isSticker(d)
                 ? select(
-                  "Цветность", path("color"), p.color,
+                  "Цветность",
+                  path("color"),
+                  p.color,
                   p.mode === "pages"
-                    ? COLORS.filter(([id]) => ["1+1", "4+4"].includes(id))
+                    ? COLORS.filter(
+                      ([id]) => ["1+1", "4+4"].includes(id)
+                    )
                     : COLORS
                 )
                 : ""}
 
-              ${select("Ламинация", path("lamination"), p.lamination, [
-                ["none", "Без ламинации"],
-                ["gloss", "Глянцевая / матовая"],
-                ["soft", "Софт-тач"]
-              ])}
+              ${select(
+                "Ламинация",
+                path("lamination"),
+                p.lamination,
+                [
+                  ["none", "Без ламинации"],
+                  ["gloss", "Глянцевая / матовая"],
+                  ["soft", "Софт-тач"]
+                ]
+              )}
 
               ${p.lamination !== "none"
                 ? select(
-                  "Сторон ламинации", path("lamSides"), p.lamSides,
-                  [[1, "Одна сторона"], [2, "Две стороны · 1+1"]],
+                  "Сторон ламинации",
+                  path("lamSides"),
+                  p.lamSides,
+                  [
+                    [1, "Одна сторона"],
+                    [2, "Две стороны · 1+1"]
+                  ],
                   { numeric: true }
                 )
                 : ""}
@@ -2488,19 +3163,27 @@
               ${check("Тиснение", path("emboss"), p.emboss)}
 
               ${advanced ? check(
-                "Резка", path("cutting"),
+                "Резка",
+                path("cutting"),
                 flyerPlotter ? false : p.cutting,
                 d.product === "stickerpack" || flyerPlotter
               ) : ""}
 
               ${advanced ? check(
-                "Вырубка", path("diecut"), p.diecut,
+                "Вырубка",
+                path("diecut"),
+                p.diecut,
                 d.product === "paket" &&
-                order.bag.includeStamp && p.role === "bag"
+                  order.bag.includeStamp &&
+                  p.role === "bag"
               ) : ""}
 
               ${d.product === "flyer"
-                ? check("Плоттерная резка", path("plotter"), original.plotter)
+                ? check(
+                  "Плоттерная резка",
+                  path("plotter"),
+                  original.plotter
+                )
                 : ""}
             </div>
 
@@ -2510,11 +3193,13 @@
                   ? money(cfg.extra.flyerPlotterSheet)
                   : "Тариф не задан"}
                 за секцию 320×450 мм.
+
                 Минимум:
                 ${nonnegative(cfg.extra.flyerPlotterMinimum)
                   ? money(cfg.extra.flyerPlotterMinimum)
                   : "не задан"}
-                на весь заказ до общей наценки.
+                на весь заказ до наценки.
+
                 Запас не отправляется на плоттер.
                 Обычная резка этого компонента не начисляется.
               </p>
@@ -2522,79 +3207,142 @@
 
             ${p.score ? `
               <div class="fields section-gap">
-                ${input("Бигов на элемент", path("scoreCount"), p.scoreCount, {
-                  min: 1, step: 1
-                })}
+                ${input(
+                  "Бигов на элемент",
+                  path("scoreCount"),
+                  p.scoreCount,
+                  { min: 1, step: 1 }
+                )}
               </div>
             ` : ""}
 
             ${advanced ? `
               <details id="component-tech-${i}">
-                <summary>Технология и параметры компонента</summary>
+                <summary>
+                  Технология и параметры компонента
+                </summary>
+
                 <div class="fields">
-                  ${input("Название", path("name"), original.name, {
-                    text: true, full: true, disabled: core
-                  })}
+                  ${input(
+                    "Название",
+                    path("name"),
+                    original.name,
+                    {
+                      text: true,
+                      full: true,
+                      disabled: core
+                    }
+                  )}
 
-                  ${select("Назначение", path("role"), p.role, [
-                    ["other", "Другой компонент"],
-                    ["cover", "Обложка"],
-                    ["block", "Блок / листы"],
-                    ["backing", "Подложка"],
-                    ["header", "Шапка"],
-                    ["base", "Основание"],
-                    ...(p.role === "bag" ? [["bag", "Развёртка пакета"]] : [])
-                  ], { disabled: core || managed })}
+                  ${select(
+                    "Назначение",
+                    path("role"),
+                    p.role,
+                    [
+                      ["other", "Другой компонент"],
+                      ["cover", "Обложка"],
+                      ["block", "Блок / листы"],
+                      ["backing", "Подложка"],
+                      ["header", "Шапка"],
+                      ["base", "Основание"],
+                      ...(p.role === "bag"
+                        ? [["bag", "Развёртка пакета"]]
+                        : [])
+                    ],
+                    { disabled: core || managed }
+                  )}
 
-                  ${select("Способ количества", path("mode"), p.mode, [
-                    ["units", "Элементы"],
-                    ["pages", "Полосы"]
-                  ], { disabled: core || managed })}
+                  ${select(
+                    "Способ количества",
+                    path("mode"),
+                    p.mode,
+                    [
+                      ["units", "Элементы"],
+                      ["pages", "Полосы"]
+                    ],
+                    { disabled: core || managed }
+                  )}
 
                   ${!isSticker(d) ? `
                     ${select(
-                      "Цена бумаги", path("priceMode"), p.priceMode,
-                      [["kg", "За килограмм"], ["sheet", "За печатный лист"]],
+                      "Цена бумаги",
+                      path("priceMode"),
+                      p.priceMode,
+                      [
+                        ["kg", "За килограмм"],
+                        ["sheet", "За печатный лист"]
+                      ],
                       { disabled: fixedPrice }
                     )}
 
                     ${fixedPrice && p.paper === "adhesive"
-                      ? `<p class="small full">${esc(tariffText)}</p>`
+                      ? `<p class="small full">
+                          ${esc(tariffText)}
+                        </p>`
                       : p.priceMode === "kg"
                         ? input(
-                          "Бумага, ₽/кг", path("priceKg"), p.priceKg,
+                          "Бумага, ₽/кг",
+                          path("priceKg"),
+                          p.priceKg,
                           { disabled: fixedPrice }
                         )
                         : input(
                           p.paper === "designer" && fixedPrice
                             ? "Бумага, ₽/лист SRA3"
                             : "Бумага, ₽/лист",
-                          path("priceSheet"), p.priceSheet,
+                          path("priceSheet"),
+                          p.priceSheet,
                           { disabled: fixedPrice }
                         )}
                   ` : ""}
 
-                  ${input("Вылет с каждой стороны, мм", path("bleed"), p.bleed)}
+                  ${input(
+                    "Вылет с каждой стороны, мм",
+                    path("bleed"),
+                    p.bleed
+                  )}
 
-                  ${input("Комплектов форм / макетов", path("setups"), p.setups, {
-                    min: 1, step: 1,
-                    disabled: d.product === "broshyura"
-                  })}
+                  ${input(
+                    "Комплектов форм / макетов",
+                    path("setups"),
+                    p.setups,
+                    {
+                      min: 1,
+                      step: 1,
+                      disabled: d.product === "broshyura"
+                    }
+                  )}
 
                   ${p.diecut ? `
-                    ${input("Изделий на штампе", path("perStamp"), p.perStamp, {
-                      min: 1, step: 1
-                    })}
-                    ${input("Стоимость штампа, ₽", path("stamp"), p.stamp, {
-                      disabled: d.product === "paket" &&
-                        order.bag.includeStamp && p.role === "bag"
-                    })}
+                    ${input(
+                      "Изделий на штампе",
+                      path("perStamp"),
+                      p.perStamp,
+                      { min: 1, step: 1 }
+                    )}
+
+                    ${input(
+                      "Стоимость штампа, ₽",
+                      path("stamp"),
+                      p.stamp,
+                      {
+                        disabled:
+                          d.product === "paket" &&
+                          order.bag.includeStamp &&
+                          p.role === "bag"
+                      }
+                    )}
                   ` : ""}
 
                   ${p.emboss
-                    ? input("Стоимость клише, ₽", path("plate"), p.plate)
+                    ? input(
+                      "Стоимость клише, ₽",
+                      path("plate"),
+                      p.plate
+                    )
                     : ""}
                 </div>
+
                 <p class="small section-gap">
                   Цифра SRA3 и B2: приладка печати не оплачивается.
                   Число форм влияет на технологический запас.
@@ -2614,10 +3362,14 @@
 
   function renderAssembly() {
     const accessible = pro || order.product === "flyer";
-    $("assemblyCard").hidden = !accessible || order.product === "uvprint";
+
+    $("assemblyCard").hidden =
+      !accessible || order.product === "uvprint";
+
     if (!accessible || order.product === "uvprint") return;
 
     let d;
+
     try {
       d = derive(order, cfg);
     } catch {
@@ -2625,26 +3377,52 @@
     }
 
     const automatic = [
-      "bloknot", "broshyura", "quarter", "threeinone", "tent", "wall"
+      "bloknot", "broshyura", "quarter",
+      "threeinone", "tent", "wall"
     ].includes(order.product);
 
     $("assembly").innerHTML = `
       <div class="fields">
-        ${input("Сборка, ₽/изделие", "assembly", d.assembly, {
-          disabled: automatic
-        })}
-        ${input("Настройка сборки, ₽/заказ", "assemblySetup", order.assemblySetup)}
         ${input(
-          "Базовые комплектующие, ₽/изделие", "accessories",
-          order.product === "quarter" ? d.accessories : order.accessories,
+          "Сборка, ₽/изделие",
+          "assembly",
+          d.assembly,
+          { disabled: automatic }
+        )}
+
+        ${input(
+          "Настройка сборки, ₽/заказ",
+          "assemblySetup",
+          order.assemblySetup
+        )}
+
+        ${input(
+          "Базовые комплектующие, ₽/изделие",
+          "accessories",
+          order.product === "quarter"
+            ? d.accessories
+            : order.accessories,
           { disabled: order.product === "quarter" }
         )}
-        ${input("Прочие расходы, ₽/заказ", "extra", order.extra)}
+
         ${input(
-          "Примечание к комплектующим", "accessoriesNote", order.accessoriesNote,
-          { text: true, full: true, disabled: order.product === "quarter" }
+          "Прочие расходы, ₽/заказ",
+          "extra",
+          order.extra
+        )}
+
+        ${input(
+          "Примечание к комплектующим",
+          "accessoriesNote",
+          order.accessoriesNote,
+          {
+            text: true,
+            full: true,
+            disabled: order.product === "quarter"
+          }
         )}
       </div>
+
       <p class="small section-gap">
         Автоматическая сборка берётся из prices.js.
         Покупные блоки 3 в 1 и домика добавляются отдельно.
@@ -2660,6 +3438,7 @@
   function bagSVG(b, physical = false) {
     const g = bagGeometry(b);
     const lines = bagLines(b);
+
     if (!lines.length) return "";
 
     return `
@@ -2671,14 +3450,20 @@
           : 'role="img" aria-label="Предварительная развёртка пакета"'}
       >
         <rect
-          x="0" y="0" width="${g.width}" height="${g.height}"
-          fill="none" stroke="#b3bacb" stroke-width=".7"
+          x="0" y="0"
+          width="${g.width}" height="${g.height}"
+          fill="none"
+          stroke="#b3bacb"
+          stroke-width=".7"
         />
+
         ${lines.map(line => `
           <line
             x1="${line.x1}" y1="${line.y1}"
             x2="${line.x2}" y2="${line.y2}"
-            stroke="#635bff" stroke-width="1" fill="none"
+            stroke="#635bff"
+            stroke-width="1"
+            fill="none"
           />
         `).join("")}
       </svg>
@@ -2690,6 +3475,7 @@
     if (!root) return;
 
     const svg = bagSVG(order.bag);
+
     if (!svg) {
       root.textContent = "Укажите размеры пакета.";
       return;
@@ -2700,16 +3486,28 @@
 
     root.innerHTML = `
       <div class="actions">
-        <strong>${num(g.width)}×${num(g.height)} мм · ${g.parts} ч.</strong>
-        <button class="button compact" data-action="bag-svg">Скачать SVG</button>
+        <strong>
+          ${num(g.width)}×${num(g.height)} мм · ${g.parts} ч.
+        </strong>
+
+        <button class="button compact" data-action="bag-svg">
+          Скачать SVG
+        </button>
       </div>
+
       ${svg}
-      <p class="small">Предварительная схема, не производственный чертёж штампа.</p>
+
+      <p class="small">
+        Предварительная схема, не производственный чертёж штампа.
+      </p>
+
       ${pro ? `
         <p class="small">
           Линии: ${num(estimate.meters)} пог. м.
           Оценка штампа: ${money(estimate.cost)}.
-          ${order.bag.includeStamp ? "Включён." : "Не включён автоматически."}
+          ${order.bag.includeStamp
+            ? "Включён."
+            : "Не включён автоматически."}
         </p>
       ` : ""}
     `;
@@ -2722,18 +3520,28 @@
   function describe(d, result, c = cfg) {
     if (d.product === "uvprint") {
       const u = d.uv;
+
       return [
         UV_TYPES.find(([id]) => id === u.type)?.[1] || "УФ-печать",
+
         u.type === "timedSheet"
           ? "Лист 500×700 мм, одна сторона."
           : u.type !== "pens"
             ? `${num(u.w)}×${num(u.h)} мм.`
             : "",
+
         !["pens", "pvc3"].includes(u.type)
           ? (u.white ? "С белилами." : "Без белил.")
           : "",
-        u.type === "designer300" ? `Цветность ${u.designerColor}.` : "",
-        u.type === "designer300" && u.softTouch ? "Софт-тач включён." : "",
+
+        u.type === "designer300"
+          ? `Цветность ${u.designerColor}.`
+          : "",
+
+        u.type === "designer300" && u.softTouch
+          ? "Софт-тач включён."
+          : "",
+
         result?.info || ""
       ].filter(Boolean).join("\n");
     }
@@ -2741,19 +3549,29 @@
     const lines = [];
 
     if (d.product === "paket") {
-      lines.push(`Готовый пакет: ${d.bag.a}×${d.bag.b}×${d.bag.c} мм.`);
-      if (d.bag.includeStamp) lines.push("Новый штамп включён.");
+      lines.push(
+        `Готовый пакет: ${d.bag.a}×${d.bag.b}×${d.bag.c} мм.`
+      );
+
+      if (d.bag.includeStamp) {
+        lines.push("Новый штамп включён.");
+      }
     }
 
     for (const p of d.components.filter(item => item.enabled)) {
       const operations = [];
+
       if (p.cutting) operations.push("резка");
+
       if (p.lamination !== "none") {
         operations.push(
-          (p.lamination === "soft" ? "софт-тач" : "ламинация") +
+          (p.lamination === "soft"
+            ? "софт-тач"
+            : "ламинация") +
           `, сторон: ${p.lamSides}`
         );
       }
+
       if (p.score) operations.push("биговка");
       if (p.folding) operations.push("фальцовка");
       if (p.diecut) operations.push("вырубка");
@@ -2769,30 +3587,54 @@
 
       lines.push(
         `${p.name}: ${num(p.w)}×${num(p.h)} мм; ` +
-        (p.mode === "pages" ? `${p.pages} полос` : `${p.units} эл./изд.`) +
-        `; ${c.papers[p.paper]?.label || p.paper}, ${p.density} г/м²; ` +
+        (
+          p.mode === "pages"
+            ? `${p.pages} полос`
+            : `${p.units} эл./изд.`
+        ) +
+        `; ${c.papers[p.paper]?.label || p.paper}, ` +
+        `${p.density} г/м²; ` +
         (p.color === "none" ? "без печати" : p.color) +
-        (operations.length ? "; " + operations.join(", ") : "") + "."
+        (
+          operations.length
+            ? "; " + operations.join(", ")
+            : ""
+        ) +
+        "."
       );
     }
 
     if (d.accessoriesNote) {
-      lines.push("Комплектующие: " + d.accessoriesNote + ".");
+      lines.push(
+        "Комплектующие: " + d.accessoriesNote + "."
+      );
     }
 
-    if (d.product === "tent" && d.tent.blockMode !== "printed") {
-      lines.push("На календарь включён один готовый покупной блок Полимат.");
+    if (
+      d.product === "tent" &&
+      d.tent.blockMode !== "printed"
+    ) {
+      lines.push(
+        "На календарь включён один готовый покупной блок Полимат."
+      );
+
       if (d.tent.blockMode === "polimatCover") {
-        lines.push("Печать отдельной верхней обложки включена.");
+        lines.push(
+          "Печать отдельной верхней обложки включена."
+        );
       }
     }
 
     if (d.product === "flyer") {
-      const plotterParts = (result?.parts || []).filter(p => p.flyerPlotter);
+      const plotterParts = (result?.parts || [])
+        .filter(p => p.flyerPlotter);
+
       if (plotterParts.length) {
         lines.push(
           "Плоттер: " +
-          num(plotterParts.reduce((sum, p) => sum + p.plotterSheets, 0)) +
+          num(plotterParts.reduce(
+            (sum, p) => sum + p.plotterSheets, 0
+          )) +
           " секций 320×450 мм."
         );
       }
@@ -2800,12 +3642,16 @@
 
     if (result?.hybrid) {
       lines.push("Комбинированное производство:");
+
       result.parts.forEach(p => {
         lines.push(p.name + " — " + p.method + ".");
       });
     }
 
-    (result?.warnings || []).forEach(w => lines.push("Важно: " + w));
+    (result?.warnings || []).forEach(w => {
+      lines.push("Важно: " + w);
+    });
+
     return lines.join("\n");
   }
 
@@ -2816,7 +3662,8 @@
   function renderResult(result, best) {
     const opened = new Set([
       ...document.querySelectorAll(
-        "#results details[open][id], #professionalResults details[open][id]"
+        "#results details[open][id], " +
+        "#professionalResults details[open][id]"
       )
     ].map(node => node.id));
 
@@ -2824,13 +3671,17 @@
       <div class="result-main">
         <div class="result-top">
           <h2>Ваш расчёт</h2>
-          <span class="badge">${archived ? "Архивные тарифы" : "Предварительно"}</span>
+          <span class="badge">
+            ${archived ? "Архивные тарифы" : "Предварительно"}
+          </span>
         </div>
 
         <div class="price-label">Стоимость заказа</div>
         <div class="price">${money(result.price)}</div>
+
         <div class="unit-price">
-          ${money(result.unitPrice)} за единицу · ${num(order.quantity)} шт.
+          ${money(result.unitPrice)} за единицу ·
+          ${num(order.quantity)} шт.
         </div>
 
         <div class="divider"></div>
@@ -2838,30 +3689,37 @@
 
         <dl class="spec-list">
           <div class="spec-row">
-            <dt>Изделие</dt><dd>${esc(product(order.product)[1])}</dd>
+            <dt>Изделие</dt>
+            <dd>${esc(product(order.product)[1])}</dd>
           </div>
           <div class="spec-row">
-            <dt>Тираж</dt><dd>${num(order.quantity)} шт.</dd>
+            <dt>Тираж</dt>
+            <dd>${num(order.quantity)} шт.</dd>
           </div>
           <div class="spec-row">
-            <dt>Тарифы</dt><dd>${esc(cfg.meta.version)}</dd>
+            <dt>Тарифы</dt>
+            <dd>${esc(cfg.meta.version)}</dd>
           </div>
         </dl>
 
         <details class="section-gap" id="result-spec">
           <summary class="small">Полный состав заказа</summary>
-          <div class="result-description section-gap">${esc(describe(derived, result))}</div>
+          <div class="result-description section-gap">
+            ${esc(describe(derived, result))}
+          </div>
         </details>
 
         ${order.note ? `
-          <p class="result-description section-gap">${esc(order.note)}</p>
+          <p class="result-description section-gap">
+            ${esc(order.note)}
+          </p>
         ` : ""}
 
         <div class="technology">
           <strong>${esc(result.label)}</strong>
           <small>
             ${result.uv
-              ? "Продажный тариф без общей наценки"
+              ? "Продажный тариф без дополнительной наценки"
               : result.id === best.id
                 ? "Минимальная учтённая себестоимость"
                 : "Выбран вручную"}
@@ -2869,11 +3727,15 @@
         </div>
 
         ${result.warnings.map(w => `
-          <div class="notice warning section-gap">${esc(w)}</div>
+          <div class="notice warning section-gap">
+            ${esc(w)}
+          </div>
         `).join("")}
 
         ${result.uv ? `
-          <div class="section-gap">${tableRows(result.rows)}</div>
+          <div class="section-gap">
+            ${tableRows(result.rows)}
+          </div>
           <p class="small section-gap">${esc(result.info)}</p>
         ` : ""}
 
@@ -2886,18 +3748,27 @@
             >▦ Размещение на листе</button>
           ` : ""}
 
-          <button class="button primary" data-action="save">Сохранить расчёт</button>
+          <button class="button primary" data-action="save">
+            Сохранить расчёт
+          </button>
+
           <div class="secondary-actions">
-            <button class="button" data-action="copy">Копировать</button>
-            <button class="button" data-action="print">Печать</button>
+            <button class="button" data-action="copy">
+              Копировать
+            </button>
+            <button class="button" data-action="print">
+              Печать
+            </button>
           </div>
         </div>
       </div>
 
       <div class="result-footnote">
-        SlonPress.ru. Итог подтверждается после проверки макета
-        и производственных ограничений.
-        ${cfg.meta.demo ? "Используются демонстрационные тарифы." : ""}
+        SlonPress.ru. Итог подтверждается после проверки
+        макета и производственных ограничений.
+        ${cfg.meta.demo
+          ? "Используются демонстрационные тарифы."
+          : ""}
       </div>
     `;
 
@@ -2907,6 +3778,7 @@
       $("professionalResults").innerHTML = `
         <div class="notice">
           УФ использует продажные тарифы.
+          Шкала наценки не применяется.
           Отдельная себестоимость и прибыль не определяются.
         </div>
       `;
@@ -2914,34 +3786,88 @@
       $("professionalResults").innerHTML = `
         <details class="foldout" id="economics" open>
           <summary>Экономика заказа</summary>
+
           <div class="foldout-body">
             <div class="cost-row">
-              <span>Себестоимость</span><strong>${money(result.cost)}</strong>
+              <span>Себестоимость</span>
+              <strong>${money(result.cost)}</strong>
             </div>
+
+            <div class="cost-row">
+              <span>
+                ${result.pricingMode === "scale"
+                  ? "Наценка по плавной шкале"
+                  : "Фиксированная наценка"}
+              </span>
+              <strong>${num(result.markupPercent)}%</strong>
+            </div>
+
+            <div class="cost-row">
+              <span>Наценка до округления</span>
+              <strong>${money(result.markupAmount)}</strong>
+            </div>
+
+            <div class="cost-row">
+              <span>Округление цены вверх</span>
+              <strong>
+                ${cfg.rates.rounding > 0
+                  ? "до " + money(cfg.rates.rounding)
+                  : "до копеек"}
+              </strong>
+            </div>
+
             <div class="cost-row profit">
-              <span>Прибыль</span><strong>${money(result.profit)}</strong>
+              <span>Прибыль после округления</span>
+              <strong>${money(result.profit)}</strong>
             </div>
-            <p class="small">До налогов и неучтённых накладных расходов.</p>
+
+            <p class="small">
+              Наценка применяется один раз к себестоимости
+              всего заказа. Прибыль указана до налогов
+              и неучтённых накладных расходов.
+            </p>
           </div>
         </details>
 
         <details class="foldout section-gap" id="methods">
           <summary>Сравнить технологии</summary>
+
           <div class="foldout-body">
-            <button class="button compact" data-action="method-auto">
-              Автоматический выбор
-            </button>
+            <button
+              class="button compact"
+              data-action="method-auto"
+            >Автоматический выбор</button>
+
             <div class="table-scroll section-gap">
               <table>
-                <thead><tr><th>Вариант</th><th>Цена</th><th></th></tr></thead>
+                <thead>
+                  <tr>
+                    <th>Вариант</th>
+                    <th>Цена</th>
+                    <th></th>
+                  </tr>
+                </thead>
                 <tbody>
                   ${methods.map(m => m.valid ? `
-                    <tr class="${m.id === best.id ? "best" : ""} ${m.id === result.id ? "selected" : ""}">
+                    <tr class="
+                      ${m.id === best.id ? "best" : ""}
+                      ${m.id === result.id ? "selected" : ""}
+                    ">
                       <td>
-                        ${m.id === best.id ? "★ " : ""}${esc(m.label)}
-                        <div class="small">Затраты: ${money(m.cost)}</div>
+                        ${m.id === best.id ? "★ " : ""}
+                        ${esc(m.label)}
+
+                        <div class="small">
+                          Затраты: ${money(m.cost)}
+                        </div>
+
+                        <div class="small">
+                          Наценка: ${num(m.markupPercent)}%
+                        </div>
                       </td>
+
                       <td>${money(m.price)}</td>
+
                       <td>
                         <button
                           class="text-button"
@@ -2953,7 +3879,9 @@
                   ` : `
                     <tr>
                       <td>${esc(m.label)}</td>
-                      <td colspan="2" class="small">${esc(m.reason)}</td>
+                      <td colspan="2" class="small">
+                        ${esc(m.reason)}
+                      </td>
                     </tr>
                   `).join("")}
                 </tbody>
@@ -2964,42 +3892,58 @@
 
         <details class="foldout section-gap" id="cost-details">
           <summary>Бумага, печать и операции</summary>
+
           <div class="foldout-body">
             ${result.parts.map(p => `
               <div class="detail-block">
                 <h3>${esc(p.name)}</h3>
+
                 <p class="small">
                   ${esc(p.method)}.
                   Вместимость: ${num(p.capacity)}.
-                  Листов: ${num(p.baseSheets)} + ${num(p.spoil)} запас.
+                  Листов: ${num(p.baseSheets)}
+                  + ${num(p.spoil)} запас.
                   Бумага: ${money(p.paperPerSheet)}/лист.
                   Форм: ${num(p.formCount)}.
+
                   ${p.setupCount
-                    ? `Приладки: ${num(p.setupCount)} по ${money(p.setupRate)}.`
+                    ? `Приладки: ${num(p.setupCount)}
+                       по ${money(p.setupRate)}.`
                     : "Приладка печати не начисляется."}
+
                   ${p.plotterSheets
-                    ? "Секций плоттера: " + num(p.plotterSheets) + "."
+                    ? "Секций плоттера: " +
+                      num(p.plotterSheets) + "."
                     : ""}
                 </p>
+
                 ${Object.entries(p.rows)
                   .filter(([, value]) => value !== 0)
                   .map(([key, value]) => `
                     <div class="cost-row">
-                      <span>${esc(ROW_LABELS[key] || key)}</span>
+                      <span>
+                        ${esc(ROW_LABELS[key] || key)}
+                      </span>
                       <strong>${money(value)}</strong>
                     </div>
                   `).join("")}
               </div>
             `).join("")}
+
             <div class="detail-block">
               <div class="cost-row">
-                <span>Сборка</span><strong>${money(result.assembly)}</strong>
+                <span>Сборка</span>
+                <strong>${money(result.assembly)}</strong>
               </div>
+
               <div class="cost-row">
-                <span>Комплектующие</span><strong>${money(result.accessories)}</strong>
+                <span>Комплектующие</span>
+                <strong>${money(result.accessories)}</strong>
               </div>
+
               <div class="cost-row">
-                <span>Прочее</span><strong>${money(result.extra)}</strong>
+                <span>Прочее</span>
+                <strong>${money(result.extra)}</strong>
               </div>
             </div>
           </div>
@@ -3009,11 +3953,16 @@
 
     for (const id of opened) {
       const node = $(id);
-      if (node instanceof HTMLDetailsElement) node.open = true;
+
+      if (node instanceof HTMLDetailsElement) {
+        node.open = true;
+      }
     }
 
     $("mobilePrice").textContent = money(result.price);
-    $("mobileUnit").textContent = money(result.unitPrice) + " за единицу";
+
+    $("mobileUnit").textContent =
+      money(result.unitPrice) + " за единицу";
   }
 
   function recalculate() {
@@ -3023,8 +3972,12 @@
 
     try {
       derived = derive(order, cfg);
+
       const errors = validateOrder(derived, cfg);
-      if (errors.length) throw new Error(errors.join("\n"));
+
+      if (errors.length) {
+        throw new Error(errors.join("\n"));
+      }
 
       methods = order.product === "uvprint"
         ? [calculateUV(derived, cfg)]
@@ -3035,23 +3988,33 @@
       if (!valid.length) {
         throw new Error(
           "Подходящий вариант не найден.\n" +
-          methods.map(m => m.label + ": " + m.reason).join("\n")
+          methods.map(
+            m => m.label + ": " + m.reason
+          ).join("\n")
         );
       }
 
       const best = valid.reduce((a, b) =>
-        (a.cost ?? a.price) <= (b.cost ?? b.price) ? a : b
+        (a.cost ?? a.price) <= (b.cost ?? b.price)
+          ? a
+          : b
       );
 
-      chosen = valid.find(m => m.id === selectedMethod) || best;
+      chosen =
+        valid.find(m => m.id === selectedMethod) ||
+        best;
 
-      if (selectedMethod && !valid.some(m => m.id === selectedMethod)) {
+      if (
+        selectedMethod &&
+        !valid.some(m => m.id === selectedMethod)
+      ) {
         selectedMethod = null;
       }
 
       renderResult(chosen, best);
     } catch (error) {
       console.warn(error);
+
       $("results").innerHTML = `
         <div class="error">
           <h3>Уточните параметры</h3>
@@ -3060,6 +4023,7 @@
           `).join("")}
         </div>
       `;
+
       $("professionalResults").innerHTML = "";
       $("mobilePrice").textContent = "—";
       $("mobileUnit").textContent = "Расчёт недоступен";
@@ -3070,20 +4034,33 @@
 
   function renderAll() {
     clearTimeout(timer);
+
     const opened = new Set([
       ...document.querySelectorAll("details[open][id]")
     ].map(node => node.id));
 
     const p = product(order.product);
+
     $("productTitle").textContent = p[1];
     $("productGroup").textContent = p[2];
     $("productHint").textContent = p[4];
 
     $("proButton").classList.toggle("active", pro);
-    $("proButton").setAttribute("aria-pressed", String(pro));
-    $("proButton").textContent = pro ? "Закрыть проф. режим" : "Проф. режим";
-    $("sidebarVersion").textContent = "Тарифы " + current.meta.version;
-    $("footerVersion").textContent = "Тарифы расчёта: " + cfg.meta.version;
+
+    $("proButton").setAttribute(
+      "aria-pressed", String(pro)
+    );
+
+    $("proButton").textContent = pro
+      ? "Закрыть проф. режим"
+      : "Проф. режим";
+
+    $("sidebarVersion").textContent =
+      "Тарифы " + current.meta.version;
+
+    $("footerVersion").textContent =
+      "Тарифы расчёта: " + cfg.meta.version;
+
     $("demoBanner").hidden = !cfg.meta.demo;
     $("archiveBanner").hidden = !archived;
 
@@ -3091,11 +4068,18 @@
       $("archiveBanner").innerHTML = `
         Открыты архивные тарифы ${esc(cfg.meta.version)}.
         Сохранённый документ остаётся неизменным.
-        Рабочая копия рассчитывается по текущим формулам и ограничениям.
+        Рабочая копия использует текущие формулы
+        и ограничения оборудования.
+
+        <div class="small section-gap">
+          Правило цены: ${esc(pricingRuleText(cfg))}.
+        </div>
+
         <div class="actions">
-          <button class="button compact" data-action="use-current">
-            Пересчитать по текущим тарифам
-          </button>
+          <button
+            class="button compact"
+            data-action="use-current"
+          >Пересчитать по текущим тарифам</button>
         </div>
       `;
     }
@@ -3109,7 +4093,10 @@
 
     for (const id of opened) {
       const node = $(id);
-      if (node instanceof HTMLDetailsElement) node.open = true;
+
+      if (node instanceof HTMLDetailsElement) {
+        node.open = true;
+      }
     }
   }
 
@@ -3119,16 +4106,24 @@
       return;
     }
 
-    if (reset && !confirm("Сбросить параметры к текущему справочнику тарифов?")) {
-      return;
-    }
+    if (
+      reset &&
+      !confirm(
+        "Сбросить параметры к текущему справочнику тарифов?"
+      )
+    ) return;
 
     const previousQuantity = order?.quantity;
+
     cfg = clone(current);
     archived = false;
     order = baseOrder(id, cfg);
 
-    if (!reset && id !== "uvprint" && integer(previousQuantity)) {
+    if (
+      !reset &&
+      id !== "uvprint" &&
+      integer(previousQuantity)
+    ) {
       order.quantity = previousQuantity;
     }
 
@@ -3141,14 +4136,27 @@
   // ============================================================
 
   function repriceOrder(source) {
-    const o = normalizeOrder(clone(source), current, false);
-    const defaults = current.products[o.product] ||
-      (o.product === "diecut" ? current.products.flyer : null);
+    const o = normalizeOrder(
+      clone(source), current, false
+    );
 
-    if (!defaults) throw new Error("Нет текущих настроек изделия.");
+    const defaults = current.products[o.product] ||
+      (
+        o.product === "diecut"
+          ? current.products.flyer
+          : null
+      );
+
+    if (!defaults) {
+      throw new Error("Нет текущих настроек изделия.");
+    }
 
     for (const key of [
-      "assembly", "assemblySetup", "accessories", "extra", "accessoriesNote"
+      "assembly",
+      "assemblySetup",
+      "accessories",
+      "extra",
+      "accessoriesNote"
     ]) {
       o[key] = defaults[key];
     }
@@ -3158,29 +4166,42 @@
       let base = specs[index];
 
       if (!base || (base.role || "other") !== p.role) {
-        const sameRole = specs.filter(s => (s.role || "other") === p.role);
-        base = sameRole.length === 1 ? sameRole[0] : null;
+        const sameRole = specs.filter(
+          s => (s.role || "other") === p.role
+        );
+
+        base = sameRole.length === 1
+          ? sameRole[0]
+          : null;
       }
 
       const paper = current.papers[p.paper];
+
       if (!paper) {
-        throw new Error("В текущих тарифах отсутствует материал " + p.paper);
+        throw new Error(
+          "В текущих тарифах отсутствует материал " + p.paper
+        );
       }
 
-      const samePaper = base &&
+      const samePaper =
+        base &&
         (base.paper || current.component.paper) === p.paper;
 
       return {
         ...p,
+
         priceMode: samePaper
           ? base.priceMode || paper.priceMode
           : paper.priceMode,
+
         priceKg: samePaper
           ? base.priceKg ?? paper.priceKg
           : paper.priceKg,
+
         priceSheet: samePaper
           ? base.priceSheet ?? paper.priceSheet
           : paper.priceSheet,
+
         stamp: base?.stamp ?? current.component.stamp,
         plate: base?.plate ?? current.component.plate
       };
@@ -3207,19 +4228,29 @@
     if (!storageReadable) {
       toast(
         "Старое хранилище не удалось прочитать. " +
-        "Автозапись заблокирована, чтобы не затереть данные. Экспортируйте текущие."
+        "Автозапись заблокирована, чтобы не затереть данные. " +
+        "Экспортируйте текущие."
       );
       return false;
     }
 
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(database()));
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(database())
+      );
+
       updateCounts();
       return true;
     } catch (error) {
       console.error(error);
       updateCounts();
-      toast("Не удалось сохранить в браузере. Экспортируйте данные.");
+
+      toast(
+        "Не удалось сохранить в браузере. " +
+        "Экспортируйте данные."
+      );
+
       return false;
     }
   }
@@ -3248,50 +4279,75 @@
       "За единицу: " + money(result.unitPrice),
       order.note ? "Комментарий: " + order.note : "",
       "Тарифы: " + cfg.meta.version,
-      "Предварительный расчёт. Итог подтверждается после проверки макета."
+      "Предварительный расчёт. " +
+      "Итог подтверждается после проверки макета."
     ].filter(Boolean).join("\n");
   }
 
   function checkSnapshot(s) {
-    if (!object(s) || !object(s.order) || !product(s.order.product)) {
+    if (
+      !object(s) ||
+      !object(s.order) ||
+      !product(s.order.product)
+    ) {
       throw new Error("Повреждён снимок заказа.");
     }
 
     const configErrors = validateConfig(s.config);
-    if (configErrors.length) throw new Error(configErrors[0]);
 
-    const o = normalizeOrder(clone(s.order), s.config, false);
+    if (configErrors.length) {
+      throw new Error(configErrors[0]);
+    }
 
-    if (!Array.isArray(o.components) || o.components.length > 100) {
+    const o = normalizeOrder(
+      clone(s.order), s.config, false
+    );
+
+    if (
+      !Array.isArray(o.components) ||
+      o.components.length > 100
+    ) {
       throw new Error("Повреждён состав заказа.");
     }
 
     for (const key of [
-      "bag", "wall", "uv", "calendar", "three", "tent", "customBook"
+      "bag", "wall", "uv", "calendar",
+      "three", "tent", "customBook"
     ]) {
       if (!object(o[key])) {
-        throw new Error("Повреждён раздел заказа: " + key);
+        throw new Error(
+          "Повреждён раздел заказа: " + key
+        );
       }
     }
 
-    if (typeof o.name !== "string" || typeof o.note !== "string") {
-      throw new Error("Повреждено название или примечание.");
+    if (
+      typeof o.name !== "string" ||
+      typeof o.note !== "string"
+    ) {
+      throw new Error(
+        "Повреждено название или примечание."
+      );
     }
 
-    // Новые ограничения листовок не должны блокировать чтение
-    // всей базы старых документов. Они проверяются при пересчёте.
+    // Новые ограничения листовок не блокируют чтение
+    // всей базы старых документов.
     const errors = validateOrder(
       derive(o, s.config),
       s.config,
       { snapshot: true }
     );
 
-    if (errors.length) throw new Error(errors[0]);
+    if (errors.length) {
+      throw new Error(errors[0]);
+    }
 
     return {
       order: o,
       config: clone(s.config),
-      method: typeof s.method === "string" ? s.method : null
+      method: typeof s.method === "string"
+        ? s.method
+        : null
     };
   }
 
@@ -3301,7 +4357,8 @@
       raw.version !== DATABASE_VERSION
     ) {
       throw new Error(
-        "Неверный формат резервной копии. Старый формат версии 6 не поддерживается."
+        "Неверный формат резервной копии. " +
+        "Старый формат версии 6 не поддерживается."
       );
     }
 
@@ -3311,13 +4368,20 @@
       raw.saved.length > 2000 ||
       raw.templates.length > 1000
     ) {
-      throw new Error("Неверный состав резервной копии.");
+      throw new Error(
+        "Неверный состав резервной копии."
+      );
     }
 
     const used = new Set();
+
     const restoreId = value => {
-      let id = typeof value === "string" && value ? value : uid();
+      let id = typeof value === "string" && value
+        ? value
+        : uid();
+
       if (used.has(id)) id = uid();
+
       used.add(id);
       return id;
     };
@@ -3331,7 +4395,9 @@
         !(item.cost === null || validCost(item.cost)) ||
         typeof item.quote !== "string"
       ) {
-        throw new Error("Повреждён сохранённый расчёт.");
+        throw new Error(
+          "Повреждён сохранённый расчёт."
+        );
       }
 
       return {
@@ -3349,7 +4415,10 @@
     });
 
     const restoredTemplates = raw.templates.map(item => {
-      if (!object(item) || typeof item.name !== "string") {
+      if (
+        !object(item) ||
+        typeof item.name !== "string"
+      ) {
         throw new Error("Повреждён шаблон.");
       }
 
@@ -3370,20 +4439,32 @@
     try {
       const text = localStorage.getItem(STORAGE_KEY);
       if (!text) return;
+
       const db = readDatabase(JSON.parse(text));
+
       saved = db.saved;
       templates = db.templates;
     } catch (error) {
       storageReadable = false;
       console.error(error);
-      toast("Сохранённые данные не прочитаны: " + error.message);
+
+      toast(
+        "Сохранённые данные не прочитаны: " +
+        error.message
+      );
     }
   }
 
   function saveResult() {
     recalculate();
-    if (!chosen) return toast("Сначала исправьте параметры.");
-    if (saved.length >= 2000) return toast("Предел: 2000 расчётов.");
+
+    if (!chosen) {
+      return toast("Сначала исправьте параметры.");
+    }
+
+    if (saved.length >= 2000) {
+      return toast("Предел: 2000 расчётов.");
+    }
 
     saved.push({
       id: uid(),
@@ -3399,18 +4480,29 @@
     });
 
     updateCounts();
-    if (persist()) toast("Расчёт сохранён.");
+
+    if (persist()) {
+      toast("Расчёт сохранён.");
+    }
   }
 
   function saveTemplate() {
     recalculate();
-    if (!chosen) return toast("Сначала исправьте параметры.");
 
-    if (order.product === "diecut") {
-      return toast("Архивное изделие удалено из каталога новых шаблонов.");
+    if (!chosen) {
+      return toast("Сначала исправьте параметры.");
     }
 
-    const entered = prompt("Название шаблона:", order.name);
+    if (order.product === "diecut") {
+      return toast(
+        "Архивное изделие удалено из каталога новых шаблонов."
+      );
+    }
+
+    const entered = prompt(
+      "Название шаблона:", order.name
+    );
+
     if (entered === null || !entered.trim()) return;
 
     const name = entered.trim();
@@ -3420,12 +4512,22 @@
       if (!confirm("Перезаписать шаблон?")) return;
       existing.snapshot = snapshot();
     } else {
-      if (templates.length >= 1000) return toast("Предел: 1000 шаблонов.");
-      templates.push({ id: uid(), name, snapshot: snapshot() });
+      if (templates.length >= 1000) {
+        return toast("Предел: 1000 шаблонов.");
+      }
+
+      templates.push({
+        id: uid(),
+        name,
+        snapshot: snapshot()
+      });
     }
 
     if (persist()) {
-      toast("Шаблон сохранён. При открытии применяются текущие цены.");
+      toast(
+        "Шаблон сохранён. " +
+        "При открытии применяются текущие цены и шкала наценки."
+      );
     }
   }
 
@@ -3434,6 +4536,7 @@
     if (!item) return;
 
     const s = checkSnapshot(item.snapshot);
+
     order = s.order;
     cfg = s.config;
     selectedMethod = s.method;
@@ -3441,10 +4544,15 @@
 
     closeDialog();
     renderAll();
-    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth"
+    });
+
     toast(
-      "Открыта рабочая копия. Сохранённый документ не изменён; " +
-      "пересчёт использует текущие формулы и ограничения."
+      "Открыта рабочая копия. " +
+      "Сохранённый документ не изменён."
     );
   }
 
@@ -3453,10 +4561,15 @@
     if (!item) return;
 
     if (item.snapshot.order.product === "diecut") {
-      return toast("Этот вид изделия удалён из каталога.");
+      return toast(
+        "Этот вид изделия удалён из каталога."
+      );
     }
 
-    const next = repriceOrder(checkSnapshot(item.snapshot).order);
+    const next = repriceOrder(
+      checkSnapshot(item.snapshot).order
+    );
+
     order = next;
     cfg = clone(current);
     archived = false;
@@ -3464,7 +4577,11 @@
 
     closeDialog();
     renderAll();
-    toast("Шаблон открыт с текущими ценами. Проверьте параметры и расходы.");
+
+    toast(
+      "Шаблон открыт с текущими ценами и шкалой наценки. " +
+      "Проверьте параметры и расходы."
+    );
   }
 
   // ============================================================
@@ -3473,10 +4590,17 @@
 
   function openDialog(title, html, view) {
     dialogView = view;
+
     $("dialogTitle").textContent = title;
     $("dialogBody").innerHTML = html;
 
-    if (!$("managerDialog").open) $("managerDialog").showModal();
+    $("managerDialog").setAttribute(
+      "aria-labelledby", "dialogTitle"
+    );
+
+    if (!$("managerDialog").open) {
+      $("managerDialog").showModal();
+    }
   }
 
   function closeDialog() {
@@ -3500,21 +4624,39 @@
               required
             >
           </label>
+
           <p class="small section-gap">
             Доступ к экономике заказа и служебным параметрам.
-            Это ограничение интерфейса, не серверная авторизация.
+            Это ограничение интерфейса,
+            не серверная авторизация.
           </p>
-          <p id="professionalLoginError" class="danger section-gap" role="alert"></p>
+
+          <p
+            id="professionalLoginError"
+            class="danger section-gap"
+            role="alert"
+          ></p>
+
           <div class="actions section-gap">
-            <button class="button primary" type="submit">Открыть</button>
-            <button class="button" type="button" data-action="dialog-close">Отмена</button>
+            <button
+              class="button primary"
+              type="submit"
+            >Открыть</button>
+
+            <button
+              class="button"
+              type="button"
+              data-action="dialog-close"
+            >Отмена</button>
           </div>
         </form>
       `,
       "professional-login"
     );
 
-    requestAnimationFrame(() => $("professionalPassword")?.focus());
+    requestAnimationFrame(() => {
+      $("professionalPassword")?.focus();
+    });
   }
 
   function savedDialog() {
@@ -3522,20 +4664,38 @@
       "Сохранённые расчёты",
       `
         <div class="actions">
-          <button class="button compact" data-action="saved-copy">
-            Копировать выбранные / все
-          </button>
-          <button class="button compact" data-action="export">Экспорт</button>
-          <button class="button compact" data-action="import">Импорт</button>
-          <button class="button compact danger" data-action="saved-clear">Удалить все</button>
+          <button
+            class="button compact"
+            data-action="saved-copy"
+          >Копировать выбранные / все</button>
+
+          <button
+            class="button compact"
+            data-action="export"
+          >Экспорт</button>
+
+          <button
+            class="button compact"
+            data-action="import"
+          >Импорт</button>
+
+          <button
+            class="button compact danger"
+            data-action="saved-clear"
+          >Удалить все</button>
         </div>
+
         <p class="small section-gap">
           Здесь показаны цены сохранённых документов.
-          Открытие создаёт рабочую копию с текущими формулами
-          и архивными тарифами.
+          Открытие создаёт рабочую копию
+          с текущими формулами и архивными тарифами.
+          Новая шкала применяется к архиву только
+          после нажатия «Пересчитать по текущим тарифам».
         </p>
+
         ${saved.length ? saved.map(item => {
           const date = new Date(item.created);
+
           const dateLabel = Number.isNaN(date.getTime())
             ? item.created
             : date.toLocaleString("ru-RU");
@@ -3547,37 +4707,68 @@
                   <input
                     type="checkbox"
                     data-saved="${esc(item.id)}"
-                    ${selectedSaved.has(item.id) ? "checked" : ""}
+                    ${selectedSaved.has(item.id)
+                      ? "checked"
+                      : ""}
                   >
                   <strong>${esc(item.name)}</strong>
                 </label>
-                <span class="saved-price">${money(item.price)}</span>
+
+                <span class="saved-price">
+                  ${money(item.price)}
+                </span>
               </div>
+
               <p class="small">
-                ${esc(dateLabel)} · ${num(item.quantity)} шт. ·
+                ${esc(dateLabel)} ·
+                ${num(item.quantity)} шт. ·
                 тарифы ${esc(item.snapshot.config.meta.version)}
               </p>
+
               <details class="section-gap">
-                <summary class="small">Состав заказа</summary>
-                <div class="saved-description">${esc(item.description)}</div>
+                <summary class="small">
+                  Состав заказа
+                </summary>
+
+                <div class="saved-description">
+                  ${esc(item.description)}
+                </div>
               </details>
+
               ${pro && item.cost !== null ? `
                 <p class="small section-gap">
                   Себестоимость: ${money(item.cost)}.
                   Прибыль: ${money(item.price - item.cost)}.
                 </p>
               ` : ""}
+
               <div class="actions">
-                <button class="button compact" data-action="saved-load"
-                  data-id="${esc(item.id)}">Открыть копию</button>
-                <button class="button compact" data-action="saved-item-copy"
-                  data-id="${esc(item.id)}">Копировать документ</button>
-                <button class="button compact danger" data-action="saved-delete"
-                  data-id="${esc(item.id)}">Удалить</button>
+                <button
+                  class="button compact"
+                  data-action="saved-load"
+                  data-id="${esc(item.id)}"
+                >Открыть копию</button>
+
+                <button
+                  class="button compact"
+                  data-action="saved-item-copy"
+                  data-id="${esc(item.id)}"
+                >Копировать документ</button>
+
+                <button
+                  class="button compact danger"
+                  data-action="saved-delete"
+                  data-id="${esc(item.id)}"
+                >Удалить</button>
               </div>
             </article>
           `;
-        }).join("") : `<div class="empty">Пока нет сохранённых расчётов.</div>`}
+        }).join("") : `
+          <div class="empty">
+            Пока нет сохранённых расчётов.
+          </div>
+        `}
+
         <div id="savedSum" class="sticky-sum" hidden></div>
       `,
       "saved"
@@ -3590,21 +4781,33 @@
     const root = $("savedSum");
     if (!root) return;
 
-    const items = saved.filter(x => selectedSaved.has(x.id));
+    const items = saved.filter(
+      x => selectedSaved.has(x.id)
+    );
+
     root.hidden = !items.length;
     if (!items.length) return;
 
-    const sum = items.reduce((a, x) => a + x.price, 0);
+    const sum = items.reduce(
+      (a, x) => a + x.price, 0
+    );
+
     const known = items.every(x => x.cost !== null);
-    const cost = items.reduce((a, x) => a + (x.cost || 0), 0);
+
+    const cost = items.reduce(
+      (a, x) => a + (x.cost || 0), 0
+    );
 
     root.textContent =
       `Выбрано: ${items.length}. Цена: ${money(sum)}.` +
-      (pro && known
-        ? ` Себестоимость: ${money(cost)}. Прибыль: ${money(sum - cost)}.`
-        : pro
-          ? " Общая себестоимость не определена: есть УФ-тарифы."
-          : "");
+      (
+        pro && known
+          ? ` Себестоимость: ${money(cost)}. ` +
+            `Прибыль: ${money(sum - cost)}.`
+          : pro
+            ? " Общая себестоимость не определена: есть УФ-тарифы."
+            : ""
+      );
   }
 
   function templatesDialog() {
@@ -3613,29 +4816,91 @@
       `
         <p class="muted">
           Сохраняют состав и параметры изделия.
-          При открытии стоимостные поля заменяются текущими базовыми ценами.
+          При открытии применяются текущие базовые цены
+          и текущая шкала наценки.
         </p>
+
         <div class="actions section-gap">
-          <button class="button compact" data-action="template-save">
-            Сохранить текущий заказ
-          </button>
+          <button
+            class="button compact"
+            data-action="template-save"
+          >Сохранить текущий заказ</button>
         </div>
+
         ${templates.length ? templates.map(t => `
           <div class="saved-item">
             <strong>${esc(t.name)}</strong>
+
             <div class="actions">
-              <button class="button compact" data-action="template-load"
+              <button
+                class="button compact"
+                data-action="template-load"
                 data-id="${esc(t.id)}"
-                ${t.snapshot.order.product === "diecut" ? "disabled" : ""}
+                ${t.snapshot.order.product === "diecut"
+                  ? "disabled"
+                  : ""}
               >Применить</button>
-              <button class="button compact danger" data-action="template-delete"
-                data-id="${esc(t.id)}">Удалить</button>
+
+              <button
+                class="button compact danger"
+                data-action="template-delete"
+                data-id="${esc(t.id)}"
+              >Удалить</button>
             </div>
           </div>
-        `).join("") : `<div class="empty">Шаблонов пока нет.</div>`}
+        `).join("") : `
+          <div class="empty">Шаблонов пока нет.</div>
+        `}
       `,
       "templates"
     );
+  }
+
+  function markupScaleTable(c) {
+    if (!Array.isArray(c.markupScale)) {
+      return `
+        <p class="small">
+          Фиксированная наценка: ${num(c.markup)}%.
+        </p>
+      `;
+    }
+
+    const scale = c.markupScale;
+    const first = scale[0];
+    const last = scale[scale.length - 1];
+
+    return `
+      <p class="small">
+        Между точками плавно изменяется сумма прибыли.
+        До ${money(first.cost)} применяется ${num(first.percent)}%.
+        От ${money(last.cost)} применяется ${num(last.percent)}%.
+      </p>
+
+      <div class="table-scroll section-gap">
+        <table>
+          <thead>
+            <tr>
+              <th>Себестоимость</th>
+              <th>Наценка</th>
+              <th>Продажная цена</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${scale.map(point => `
+              <tr>
+                <td>${money(point.cost)}</td>
+                <td>${num(point.percent)}%</td>
+                <td>
+                  ${money(
+                    calculateSellingPrice(point.cost, c).price
+                  )}
+                </td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
   }
 
   function ratesDialog() {
@@ -3649,79 +4914,147 @@
       "Тарифы и данные",
       `
         <div class="notice">
-          Источник новых тарифов — <strong>prices.js</strong>.
+          Основные тарифы — <strong>prices.js</strong>.
           Версия: ${esc(current.meta.version)}.
           Дата: ${esc(current.meta.updated)}.
-          ${archived ? "<br>Текущий заказ использует архивный справочник." : ""}
+
+          ${archived
+            ? "<br>Текущий заказ использует архивный справочник."
+            : ""}
         </div>
+
         ${pro ? `
           <p class="muted">
             Приладки печати SRA3 и B2 отключены в формулах.
             Специальные приладки действуют только на офсете.
           </p>
+
+          <details class="foldout section-gap" open>
+            <summary>Плавная шкала наценки</summary>
+
+            <div class="foldout-body">
+              <p class="small">
+                Источник:
+                ${usesBuiltInScale
+                  ? "встроенная согласованная шкала calculator.js."
+                  : "prices.js → markupScale."}
+                Округление новых расчётов — вверх до 1 ₽.
+                УФ-печать использует продажные тарифы без наценки.
+              </p>
+
+              ${markupScaleTable(current)}
+            </div>
+          </details>
+
+          ${archived ? `
+            <details class="foldout section-gap">
+              <summary>Правило цены открытого архива</summary>
+              <div class="foldout-body">
+                ${markupScaleTable(cfg)}
+                <p class="small section-gap">
+                  Округление архива:
+                  ${cfg.rates.rounding > 0
+                    ? "до " + money(cfg.rates.rounding)
+                    : "до копеек"}.
+                </p>
+              </div>
+            </details>
+          ` : ""}
+
           <details class="foldout section-gap">
             <summary>Общие правила</summary>
             <div class="foldout-body">
               ${objectTable({
-                "Наценка, %": current.markup,
+                "Правило наценки": pricingRuleText(current),
+                "Резервная фиксированная наценка, %": current.markup,
                 "Гибридный блокнот": current.hybrid ? "Да" : "Нет",
-                "Предел гибридного тиража": current.hybridLimit
+                "Предел гибридного тиража": current.hybridLimit,
+                "Округление вверх, ₽": current.rates.rounding
               })}
             </div>
           </details>
+
           <details class="foldout section-gap">
             <summary>Печать и отделка</summary>
-            <div class="foldout-body">${objectTable(effectiveRates)}</div>
+            <div class="foldout-body">
+              ${objectTable(effectiveRates)}
+            </div>
           </details>
+
           <details class="foldout section-gap">
             <summary>Дополнительные тарифы</summary>
-            <div class="foldout-body">${objectTable(current.extra)}</div>
+            <div class="foldout-body">
+              ${objectTable(current.extra)}
+            </div>
           </details>
+
           <details class="foldout section-gap">
             <summary>Специальные приладки офсета</summary>
             <div class="foldout-body">
-              ${objectTable({ ...current.policy, scope: "offset" })}
+              ${objectTable({
+                ...current.policy,
+                scope: "offset"
+              })}
             </div>
           </details>
+
           <details class="foldout section-gap">
             <summary>Бумага и материалы</summary>
             <div class="foldout-body">
               ${Object.entries(current.papers).map(([id, p]) => `
                 <div class="detail-block">
                   <h3>${esc(p.label)}</h3>
+
                   <p class="small">
                     ${p.priceMode === "kg"
                       ? money(p.priceKg) + "/кг"
                       : money(p.priceSheet) + "/лист"}
                   </p>
+
                   ${p.densities ? `
                     <p class="small">
-                      Плотности: ${esc(p.densities.join(", "))} г/м².
+                      Плотности:
+                      ${esc(p.densities.join(", "))} г/м².
                     </p>
                   ` : ""}
+
                   ${flyerCatalogPrice({ paper: id }) ? `
                     <p class="small">
-                      Листовки: ${esc(flyerTariffText({ paper: id }, current))}
+                      Листовки:
+                      ${esc(
+                        flyerTariffText({ paper: id }, current)
+                      )}
                     </p>
                   ` : ""}
+
                   ${id === "adhesiveFilm" ? `
-                    <p class="small">В листовках недоступна.</p>
+                    <p class="small">
+                      В листовках недоступна.
+                    </p>
                   ` : ""}
                 </div>
               `).join("")}
             </div>
           </details>
+
           <details class="foldout section-gap">
             <summary>Календарные блоки</summary>
+
             <div class="foldout-body">
               ${Object.keys(TIERS).map(tier => `
                 <div class="detail-block">
                   <h3>${TIERS[tier]}</h3>
-                  ${Object.values(current.polimat[tier]).map(b => `
-                    <p class="small">${esc(b.name)} — ${money(b.price)}</p>
+
+                  ${Object.values(
+                    current.polimat[tier]
+                  ).map(b => `
+                    <p class="small">
+                      ${esc(b.name)} — ${money(b.price)}
+                    </p>
                   `).join("")}
                 </div>
               `).join("")}
+
               ${["threeMini", "threeMidi"].map(key => `
                 <p class="small section-gap">
                   ${esc(current.polimat[key].name)} —
@@ -3732,22 +5065,36 @@
           </details>
         ` : `
           <p class="muted">
-            Просмотр полного справочника и экономики доступен
-            в профессиональном режиме.
+            Просмотр полного справочника, шкалы наценки
+            и экономики доступен в профессиональном режиме.
             Параметры компонентов листовок доступны без пароля.
           </p>
+
           <div class="actions section-gap">
-            <button class="button" data-action="pro-login">Войти в проф. режим</button>
+            <button class="button" data-action="pro-login">
+              Войти в проф. режим
+            </button>
           </div>
         `}
+
         <div class="actions section-gap">
-          <button class="button" data-action="export">Экспорт расчётов и шаблонов</button>
-          <button class="button" data-action="import">Импорт резервной копии</button>
-          <button class="button" data-action="templates-open">Шаблоны</button>
+          <button class="button" data-action="export">
+            Экспорт расчётов и шаблонов
+          </button>
+
+          <button class="button" data-action="import">
+            Импорт резервной копии
+          </button>
+
+          <button class="button" data-action="templates-open">
+            Шаблоны
+          </button>
         </div>
+
         <p class="small section-gap">
-          Резервная копия содержит тарифы внутри снимков.
-          Не передавайте её клиентам, если себестоимость служебная.
+          Резервная копия содержит тарифы и правила цены
+          внутри снимков. Не передавайте её клиентам,
+          если себестоимость служебная.
           Текущий prices.js при импорте не заменяется.
           Пароль интерфейса не защищает файл тарифов.
         </p>
@@ -3778,7 +5125,9 @@
       }
     ];
 
-    for (const v of variants) v.count = v.cols * v.rows;
+    for (const v of variants) {
+      v.count = v.cols * v.rows;
+    }
 
     return variants[1].count > variants[0].count
       ? variants[1]
@@ -3792,7 +5141,10 @@
     const ih = p.h + 2 * p.bleed;
 
     const content = zones.map((zone, index) => {
-      const grid = placementGrid(zone.w, zone.h, iw, ih);
+      const grid = placementGrid(
+        zone.w, zone.h, iw, ih
+      );
+
       if (!grid.count) return "";
 
       const gridW = grid.cols * grid.cellW;
@@ -3804,8 +5156,10 @@
           <rect
             x="${zone.sx}" y="${zone.sy}"
             width="${zone.sw}" height="${zone.sh}"
-            fill="none" stroke="#d97706"
-            stroke-width="1.2" stroke-dasharray="5 3"
+            fill="none"
+            stroke="#d97706"
+            stroke-width="1.2"
+            stroke-dasharray="5 3"
           />
         ` : ""}
 
@@ -3819,25 +5173,34 @@
             <pattern
               id="${patternId}"
               x="0" y="0"
-              width="${grid.cellW}" height="${grid.cellH}"
+              width="${grid.cellW}"
+              height="${grid.cellH}"
               patternUnits="userSpaceOnUse"
             >
               <rect
                 x="0" y="0"
-                width="${grid.cellW}" height="${grid.cellH}"
-                fill="#eeecff" stroke="#aaa2ed"
-                stroke-width=".5" stroke-dasharray="2 1"
+                width="${grid.cellW}"
+                height="${grid.cellH}"
+                fill="#eeecff"
+                stroke="#aaa2ed"
+                stroke-width=".5"
+                stroke-dasharray="2 1"
               />
+
               <rect
                 x="${p.bleed}" y="${p.bleed}"
                 width="${grid.cellW - 2 * p.bleed}"
                 height="${grid.cellH - 2 * p.bleed}"
-                fill="#c9c3ff" stroke="#635bff" stroke-width=".7"
+                fill="#c9c3ff"
+                stroke="#635bff"
+                stroke-width=".7"
               />
             </pattern>
           </defs>
+
           <rect
-            x="0" y="0" width="${gridW}" height="${gridH}"
+            x="0" y="0"
+            width="${gridW}" height="${gridH}"
             fill="url(#${patternId})"
           />
         </svg>
@@ -3850,35 +5213,56 @@
         viewBox="-12 -12 ${sheet.w + 24} ${sheet.h + 24}"
         role="img"
         aria-label="Размещение листовок на печатном листе"
-        style="display:block;width:100%;height:auto;max-height:55vh"
+        style="
+          display:block;
+          width:100%;
+          height:auto;
+          max-height:55vh
+        "
       >
-        <title>${esc(p.name)} — ${esc(sheet.label)}</title>
+        <title>
+          ${esc(p.name)} — ${esc(sheet.label)}
+        </title>
+
         <rect
-          x="0" y="0" width="${sheet.w}" height="${sheet.h}"
-          fill="white" stroke="#475569" stroke-width="1.2"
+          x="0" y="0"
+          width="${sheet.w}" height="${sheet.h}"
+          fill="white"
+          stroke="#475569"
+          stroke-width="1.2"
         />
+
         <rect
           x="${left}" y="${top}"
           width="${sheet.pw}" height="${sheet.ph}"
           fill="#f8fafc"
         />
+
         ${content}
+
         <rect
           x="${left}" y="${top}"
           width="${sheet.pw}" height="${sheet.ph}"
-          fill="none" stroke="#168567"
-          stroke-width="1" stroke-dasharray="4 3"
+          fill="none"
+          stroke="#168567"
+          stroke-width="1"
+          stroke-dasharray="4 3"
         />
       </svg>
     `;
   }
 
-  function layoutLegend() {
+  function layoutLegend(plotter) {
     const item = (label, background, border) => `
-      <span style="display:inline-flex;align-items:center;gap:6px">
+      <span style="
+        display:inline-flex;
+        align-items:center;
+        gap:6px
+      ">
         <i style="
           display:inline-block;
-          width:18px;height:13px;
+          width:18px;
+          height:13px;
           background:${background};
           border:${border};
           border-radius:2px
@@ -3889,13 +5273,34 @@
 
     return `
       <div class="small" style="
-        display:flex;flex-wrap:wrap;
-        gap:10px 18px;margin-top:14px
+        display:flex;
+        flex-wrap:wrap;
+        gap:10px 18px;
+        margin-top:14px
       ">
-        ${item("Готовое изделие", "#c9c3ff", "1px solid #635bff")}
-        ${item("Вылеты", "#eeecff", "1px dashed #aaa2ed")}
-        ${item("Печатная область", "transparent", "1px dashed #168567")}
-        ${item("Секции плоттера", "transparent", "1px dashed #d97706")}
+        ${item(
+          "Готовое изделие",
+          "#c9c3ff",
+          "1px solid #635bff"
+        )}
+
+        ${item(
+          "Вылеты",
+          "#eeecff",
+          "1px dashed #aaa2ed"
+        )}
+
+        ${item(
+          "Печатная область",
+          "transparent",
+          "1px dashed #168567"
+        )}
+
+        ${plotter ? item(
+          "Секции плоттера",
+          "transparent",
+          "1px dashed #d97706"
+        ) : ""}
       </div>
     `;
   }
@@ -3904,19 +5309,34 @@
     if (order.product !== "flyer") return;
 
     recalculate();
+
     if (!chosen || !derived) {
       toast("Сначала исправьте параметры расчёта.");
       return;
     }
 
     const active = derived.components.filter(p => p.enabled);
-    const component = active.find(p => p.id === componentId) || active[0];
-    const result = methods.find(m => m.valid && m.id === methodId) || chosen;
-    const part = result.parts.find(p => p.id === component?.id);
-    const sheet = cfg.sheets.find(s => s.id === part?.sheetId);
+
+    const component =
+      active.find(p => p.id === componentId) ||
+      active[0];
+
+    const result =
+      methods.find(m => m.valid && m.id === methodId) ||
+      chosen;
+
+    const part = result.parts.find(
+      p => p.id === component?.id
+    );
+
+    const sheet = cfg.sheets.find(
+      s => s.id === part?.sheetId
+    );
 
     if (!component || !part || !sheet) {
-      throw new Error("Не удалось определить лист для визуализации.");
+      throw new Error(
+        "Не удалось определить лист для визуализации."
+      );
     }
 
     const zones = component.plotter
@@ -3930,33 +5350,79 @@
 
     const iw = component.w + 2 * component.bleed;
     const ih = component.h + 2 * component.bleed;
+
     const grids = zones.map(zone =>
       placementGrid(zone.w, zone.h, iw, ih)
     );
-    const capacity = grids.reduce((sum, grid) => sum + grid.count, 0);
+
+    const capacity = grids.reduce(
+      (sum, grid) => sum + grid.count, 0
+    );
 
     if (capacity !== part.capacity) {
-      throw new Error("Вместимость схемы не совпадает с расчётом.");
+      throw new Error(
+        "Вместимость схемы не совпадает с расчётом."
+      );
     }
 
     const rows = [
-      ["Физический лист", `${num(sheet.w)}×${num(sheet.h)} мм`],
-      ["Печатная область", `${num(sheet.pw)}×${num(sheet.ph)} мм`],
-      ["Готовое изделие", `${num(component.w)}×${num(component.h)} мм`],
-      ["Вылет с каждой стороны", `${num(component.bleed)} мм`],
-      ["Ячейка с вылетами", `${num(iw)}×${num(ih)} мм`],
-      ["Вместимость листа", `${num(capacity)} эл.`],
+      [
+        "Физический лист",
+        `${num(sheet.w)}×${num(sheet.h)} мм`
+      ],
+      [
+        "Печатная область",
+        `${num(sheet.pw)}×${num(sheet.ph)} мм`
+      ],
+      [
+        "Готовое изделие",
+        `${num(component.w)}×${num(component.h)} мм`
+      ],
+      [
+        "Вылет с каждой стороны",
+        `${num(component.bleed)} мм`
+      ],
+      [
+        "Ячейка с вылетами",
+        `${num(iw)}×${num(ih)} мм`
+      ],
+      [
+        "Вместимость листа",
+        `${num(capacity)} эл.`
+      ],
+
       ...grids.map((grid, index) => [
-        component.plotter ? "Секция " + (index + 1) : "Сетка размещения",
+        component.plotter
+          ? "Секция " + (index + 1)
+          : "Сетка размещения",
+
         `${num(grid.cols)} по горизонтали, ` +
         `${num(grid.rows)} по вертикали; ` +
-        (grid.rotated ? "поворот на 90°" : "без поворота")
+        (
+          grid.rotated
+            ? "поворот на 90°"
+            : "без поворота"
+        )
       ]),
-      ["Чистый тираж, печатных листов", num(part.baseSheets)],
-      ["Технологический запас", num(part.spoil)],
-      ["Всего печатных листов", num(part.sheets)],
+
+      [
+        "Чистый тираж, печатных листов",
+        num(part.baseSheets)
+      ],
+      [
+        "Технологический запас",
+        num(part.spoil)
+      ],
+      [
+        "Всего печатных листов",
+        num(part.sheets)
+      ],
+
       ...(component.plotter
-        ? [["Секций плоттера на заказ", num(part.plotterSheets)]]
+        ? [[
+          "Секций плоттера на заказ",
+          num(part.plotterSheets)
+        ]]
         : [])
     ];
 
@@ -3970,16 +5436,20 @@
       "Размещение на листе",
       `
         <p class="small">
-          Просмотр другой схемы не меняет выбранную технологию заказа.
+          Просмотр другой схемы не меняет
+          выбранную технологию заказа.
         </p>
 
         <div class="fields section-gap">
           <label class="field full">
             <span>Технология для просмотра</span>
+
             <select id="layoutMethod">
               ${methods.filter(m => m.valid).map(m => `
-                <option value="${esc(m.id)}"
-                  ${m.id === result.id ? "selected" : ""}>
+                <option
+                  value="${esc(m.id)}"
+                  ${m.id === result.id ? "selected" : ""}
+                >
                   ${esc(m.label)} — ${money(m.price)}
                 </option>
               `).join("")}
@@ -3989,49 +5459,72 @@
           ${active.length > 1 ? `
             <label class="field full">
               <span>Компонент</span>
+
               <select id="layoutComponent">
                 ${active.map(p => `
-                  <option value="${esc(p.id)}"
-                    ${p.id === component.id ? "selected" : ""}>
-                    ${esc(p.name)}
-                  </option>
+                  <option
+                    value="${esc(p.id)}"
+                    ${p.id === component.id ? "selected" : ""}
+                  >${esc(p.name)}</option>
                 `).join("")}
               </select>
             </label>
           ` : ""}
         </div>
 
-        <div class="actions section-gap" style="justify-content:space-between">
+        <div
+          class="actions section-gap"
+          style="justify-content:space-between"
+        >
           <div>
             <h3>${esc(component.name)}</h3>
             <p class="small">${esc(result.label)}</p>
           </div>
-          <span class="badge">${num(capacity)} эл. на листе</span>
+
+          <span class="badge">
+            ${num(capacity)} эл. на листе
+          </span>
         </div>
 
         <div class="section-gap" style="
-          padding:16px;border:1px solid var(--line);
-          border-radius:12px;background:#eef1f6
+          padding:16px;
+          border:1px solid var(--line);
+          border-radius:12px;
+          background:#eef1f6
         ">
           ${previewState.svg}
         </div>
 
-        ${layoutLegend()}
+        ${layoutLegend(component.plotter)}
 
-        <div class="section-gap">${tableRows(rows)}</div>
+        <div class="section-gap">
+          ${tableRows(rows)}
+        </div>
 
         <div class="notice warning section-gap">
-          Это геометрическая схема вместимости, не производственный спуск.
-          Показан полностью заполненный лист; последний лист тиража
-          может быть неполным. Печатная область условно расположена
-          по центру физического листа. Захват машины, направление волокна,
-          метки и смешанная ориентация автоматически не рассчитываются.
-          Схема не показывает оборот и распределение разных макетов.
+          Это геометрическая схема вместимости,
+          не производственный спуск.
+          Показан полностью заполненный лист;
+          последний лист тиража может быть неполным.
+          Печатная область условно расположена
+          по центру физического листа.
+          Захват машины, направление волокна,
+          метки и смешанная ориентация
+          автоматически не рассчитываются.
+          Схема не показывает оборот
+          и распределение разных макетов.
         </div>
 
         <div class="actions">
-          <button class="button" data-action="layout-svg">Скачать схему SVG</button>
-          <button class="button" data-action="dialog-close">Закрыть</button>
+          <button
+            class="button"
+            data-action="layout-svg"
+          >Скачать схему SVG</button>
+
+          <button
+            class="button"
+            data-action="dialog-close"
+          >Закрыть</button>
         </div>
       `,
       "flyer-layout"
@@ -4043,13 +5536,19 @@
   // ============================================================
 
   function download(name, text, type) {
-    const url = URL.createObjectURL(new Blob([text], { type }));
+    const url = URL.createObjectURL(
+      new Blob([text], { type })
+    );
+
     const link = document.createElement("a");
+
     link.href = url;
     link.download = name;
+
     document.body.appendChild(link);
     link.click();
     link.remove();
+
     setTimeout(() => URL.revokeObjectURL(url), 3000);
   }
 
@@ -4059,6 +5558,7 @@
       toast("Скопировано.");
     } catch {
       const area = document.createElement("textarea");
+
       area.value = text;
       area.style.position = "fixed";
       area.style.opacity = "0";
@@ -4071,6 +5571,7 @@
       area.select();
 
       let ok = false;
+
       try {
         ok = document.execCommand("copy");
       } catch {
@@ -4078,8 +5579,12 @@
       }
 
       area.remove();
-      if (ok) toast("Скопировано.");
-      else prompt("Скопируйте текст:", text);
+
+      if (ok) {
+        toast("Скопировано.");
+      } else {
+        prompt("Скопируйте текст:", text);
+      }
     }
   }
 
@@ -4088,13 +5593,18 @@
 
     try {
       if (file.size > 20 * 1024 * 1024) {
-        throw new Error("Максимальный размер файла — 20 МБ.");
+        throw new Error(
+          "Максимальный размер файла — 20 МБ."
+        );
       }
 
-      const db = readDatabase(JSON.parse(await file.text()));
+      const db = readDatabase(
+        JSON.parse(await file.text())
+      );
 
       if (!confirm(
-        "Заменить сохранённые расчёты и шаблоны? Текущий prices.js не изменится."
+        "Заменить сохранённые расчёты и шаблоны? " +
+        "Текущий prices.js не изменится."
       )) return;
 
       saved = db.saved;
@@ -4104,10 +5614,16 @@
 
       const ok = persist();
       savedDialog();
-      if (ok) toast("Резервная копия импортирована.");
+
+      if (ok) {
+        toast("Резервная копия импортирована.");
+      }
     } catch (error) {
       console.error(error);
-      toast("Импорт не выполнен: " + error.message);
+
+      toast(
+        "Импорт не выполнен: " + error.message
+      );
     } finally {
       $("importFile").value = "";
     }
@@ -4118,13 +5634,17 @@
   // ============================================================
 
   function fieldEditable(path) {
-    const match = path.match(/^components\.(\d+)\.(\w+)$/);
+    const match = path.match(
+      /^components\.(\d+)\.(\w+)$/
+    );
 
     if (
       match &&
       order.product === "flyer" &&
       ["priceMode", "priceKg", "priceSheet"].includes(match[2]) &&
-      flyerCatalogPrice(order.components[Number(match[1])] || {})
+      flyerCatalogPrice(
+        order.components[Number(match[1])] || {}
+      )
     ) {
       return false;
     }
@@ -4132,12 +5652,20 @@
     if (pro) return true;
 
     if ([
-      "bag.extraSheets", "bag.confirmPhysical",
-      "bag.includeStamp", "bag.outerContour"
-    ].includes(path)) return false;
+      "bag.extraSheets",
+      "bag.confirmPhysical",
+      "bag.includeStamp",
+      "bag.outerContour"
+    ].includes(path)) {
+      return false;
+    }
 
     if ([
-      "assembly", "assemblySetup", "accessories", "extra", "accessoriesNote"
+      "assembly",
+      "assemblySetup",
+      "accessories",
+      "extra",
+      "accessoriesNote"
     ].includes(path)) {
       return order.product === "flyer";
     }
@@ -4149,14 +5677,19 @@
         "bleed", "setups", "cutting", "diecut",
         "perStamp", "stamp", "plate", "plotter"
       ];
-      if (advancedKeys.includes(match[2])) return false;
+
+      if (advancedKeys.includes(match[2])) {
+        return false;
+      }
     }
 
     return true;
   }
 
   function refreshQuickButtons() {
-    document.querySelectorAll('[data-action="quantity"]').forEach(button => {
+    document.querySelectorAll(
+      '[data-action="quantity"]'
+    ).forEach(button => {
       button.classList.toggle(
         "active",
         Number(button.dataset.value) === order.quantity
@@ -4165,20 +5698,37 @@
 
     if (order.product !== "flyer") return;
 
-    document.querySelectorAll('[data-action="flyer-size"]').forEach(button => {
-      const p = order.components[Number(button.dataset.index)];
-      const f = FLYER_FORMATS.find(item => item.id === button.dataset.value);
+    document.querySelectorAll(
+      '[data-action="flyer-size"]'
+    ).forEach(button => {
+      const p = order.components[
+        Number(button.dataset.index)
+      ];
+
+      const f = FLYER_FORMATS.find(
+        item => item.id === button.dataset.value
+      );
+
       const active = !!p && !!f && (
         (p.w === f.w && p.h === f.h) ||
         (p.w === f.h && p.h === f.w)
       );
+
       button.classList.toggle("active", active);
       button.setAttribute("aria-pressed", String(active));
     });
 
-    document.querySelectorAll('[data-action="flyer-density"]').forEach(button => {
-      const p = order.components[Number(button.dataset.index)];
-      const active = !!p && p.density === Number(button.dataset.value);
+    document.querySelectorAll(
+      '[data-action="flyer-density"]'
+    ).forEach(button => {
+      const p = order.components[
+        Number(button.dataset.index)
+      ];
+
+      const active =
+        !!p &&
+        p.density === Number(button.dataset.value);
+
       button.classList.toggle("active", active);
       button.setAttribute("aria-pressed", String(active));
     });
@@ -4186,33 +5736,51 @@
 
   function updateField(target, structural) {
     const path = target.dataset.path;
-    if (!path || target.disabled || !fieldEditable(path)) return;
+
+    if (
+      !path ||
+      target.disabled ||
+      !fieldEditable(path)
+    ) return;
 
     let value;
+
     if (target.type === "checkbox") {
       value = target.checked;
-    } else if (target.type === "number" || target.dataset.numeric) {
-      value = target.value === "" ? NaN : Number(target.value);
+    } else if (
+      target.type === "number" ||
+      target.dataset.numeric
+    ) {
+      value = target.value === ""
+        ? NaN
+        : Number(target.value);
     } else {
       value = target.value;
     }
 
-    const match = path.match(/^components\.(\d+)\.(\w+)$/);
+    const match = path.match(
+      /^components\.(\d+)\.(\w+)$/
+    );
 
     if (
       match &&
       order.product === "flyer" &&
       match[2] === "paper" &&
-      (value === "adhesiveFilm" || !cfg.papers[value])
-    ) {
-      return;
-    }
+      (
+        value === "adhesiveFilm" ||
+        !cfg.papers[value]
+      )
+    ) return;
 
     if (!setPath(order, path, value)) return;
-    if (!["name", "note"].includes(path)) selectedMethod = null;
+
+    if (!["name", "note"].includes(path)) {
+      selectedMethod = null;
+    }
 
     if (["bag.a", "bag.b", "bag.c"].includes(path)) {
       order.bag.confirmPhysical = false;
+
       const rule = bagGeometry(order.bag).rule;
       if (rule) order.bag.type = rule.type;
     }
@@ -4222,14 +5790,18 @@
       order.uv.softTouch = false;
 
       if (value === "adhesive") {
-        Object.assign(order.uv, { w: 1000, h: 1000 });
+        Object.assign(order.uv, {
+          w: 1000, h: 1000
+        });
         order.quantity = 1;
       } else if (value === "pens") {
         order.quantity = 100;
       } else if (value === "timedSheet") {
         order.quantity = 1;
       } else {
-        Object.assign(order.uv, { w: 100, h: 100 });
+        Object.assign(order.uv, {
+          w: 100, h: 100
+        });
         order.quantity = 10;
       }
     }
@@ -4240,6 +5812,7 @@
 
       if (key === "paper") {
         const material = cfg.papers[value];
+
         if (material) {
           Object.assign(p, {
             density: material.density,
@@ -4250,13 +5823,22 @@
         }
       }
 
-      if (key === "mode" && value === "pages" && SIDES[p.color] !== 2) {
+      if (
+        key === "mode" &&
+        value === "pages" &&
+        SIDES[p.color] !== 2
+      ) {
         p.color = "4+4";
       }
 
       if (order.product === "flyer") {
-        if (key === "plotter" && value) p.diecut = false;
-        if (key === "diecut" && value) p.plotter = false;
+        if (key === "plotter" && value) {
+          p.diecut = false;
+        }
+
+        if (key === "diecut" && value) {
+          p.plotter = false;
+        }
       }
     }
 
@@ -4264,6 +5846,7 @@
       renderAll();
     } else {
       refreshQuickButtons();
+
       clearTimeout(timer);
       timer = setTimeout(recalculate, 180);
     }
@@ -4273,16 +5856,24 @@
     if (scope === "book") {
       if (value === "CUSTOM") {
         const format = FORMATS[order.bookFormat];
-        if (format) order.customBook = clone(format);
+
+        if (format) {
+          order.customBook = clone(format);
+        }
       }
+
       order.bookFormat = value;
     }
 
     if (scope === "wall") {
       if (value === "custom") {
         const format = FORMATS[order.wall.format];
-        if (format) Object.assign(order.wall, format);
+
+        if (format) {
+          Object.assign(order.wall, format);
+        }
       }
+
       order.wall.format = value;
     }
 
@@ -4291,6 +5882,7 @@
 
       if (value === "custom" && q.size !== "custom") {
         const geometry = cfg.calendar[q.size];
+
         Object.assign(q, {
           tier: q.size,
           customW: geometry.w,
@@ -4309,32 +5901,49 @@
   }
 
   // ============================================================
-  // СОБЫТИЯ
+  // СОБЫТИЯ ПОЛЕЙ
   // ============================================================
 
   document.addEventListener("input", event => {
     if (!ready) return;
+
     const target = event.target;
 
+    if (!(target instanceof Element)) return;
+
     if (target.matches(
-      'input[data-path]:not([type="checkbox"]), textarea[data-path]'
+      'input[data-path]:not([type="checkbox"]), ' +
+      'textarea[data-path]'
     )) {
-      updateField(target, false);
+      try {
+        updateField(target, false);
+      } catch (error) {
+        console.error(error);
+        toast(error.message);
+      }
     }
   });
 
   document.addEventListener("change", event => {
     if (!ready) return;
+
     const target = event.target;
+    if (!(target instanceof Element)) return;
 
     try {
       if (target.id === "layoutMethod") {
-        showFlyerLayout(previewState?.componentId, target.value);
+        showFlyerLayout(
+          previewState?.componentId,
+          target.value
+        );
         return;
       }
 
       if (target.id === "layoutComponent") {
-        showFlyerLayout(target.value, previewState?.methodId);
+        showFlyerLayout(
+          target.value,
+          previewState?.methodId
+        );
         return;
       }
 
@@ -4344,20 +5953,27 @@
       }
 
       if (target.matches(
-        'select[data-path], input[type="checkbox"][data-path]'
+        'select[data-path], ' +
+        'input[type="checkbox"][data-path]'
       )) {
         updateField(target, true);
         return;
       }
 
       if (target.matches("input[data-saved]")) {
-        if (target.checked) selectedSaved.add(target.dataset.saved);
-        else selectedSaved.delete(target.dataset.saved);
+        if (target.checked) {
+          selectedSaved.add(target.dataset.saved);
+        } else {
+          selectedSaved.delete(target.dataset.saved);
+        }
+
         renderSavedSum();
         return;
       }
 
-      if (target.matches("input[data-path], textarea[data-path]")) {
+      if (target.matches(
+        "input[data-path], textarea[data-path]"
+      )) {
         recalculate();
       }
     } catch (error) {
@@ -4367,7 +5983,10 @@
   });
 
   document.addEventListener("submit", event => {
-    if (event.target.id !== "professionalLoginForm") return;
+    if (event.target.id !== "professionalLoginForm") {
+      return;
+    }
+
     event.preventDefault();
 
     const password = $("professionalPassword");
@@ -4381,15 +6000,25 @@
 
     password.value = "";
     pro = true;
+
     closeDialog();
     renderAll();
+
     toast("Профессиональный режим открыт.");
   });
 
+  // ============================================================
+  // СОБЫТИЯ КНОПОК
+  // ============================================================
+
   document.addEventListener("click", event => {
     if (!ready) return;
+    if (!(event.target instanceof Element)) return;
 
-    const button = event.target.closest("button[data-action]");
+    const button = event.target.closest(
+      "button[data-action]"
+    );
+
     if (!button || button.disabled) return;
 
     const action = button.dataset.action;
@@ -4408,7 +6037,11 @@
         case "pro-toggle":
           if (pro) {
             pro = false;
-            if ($("managerDialog").open) closeDialog();
+
+            if ($("managerDialog").open) {
+              closeDialog();
+            }
+
             renderAll();
             toast("Профессиональный режим закрыт.");
           } else {
@@ -4417,8 +6050,11 @@
           break;
 
         case "pro-login":
-          if (!pro) openProfessionalLogin();
-          else ratesDialog();
+          if (!pro) {
+            openProfessionalLogin();
+          } else {
+            ratesDialog();
+          }
           break;
 
         case "quantity":
@@ -4428,15 +6064,24 @@
           break;
 
         case "format":
-          setFormat(button.dataset.scope, button.dataset.value);
+          setFormat(
+            button.dataset.scope,
+            button.dataset.value
+          );
           break;
 
         case "flyer-size": {
           if (order.product !== "flyer") return;
+
           const index = Number(button.dataset.index);
-          if (!whole(index) || index >= order.components.length) return;
+
+          if (
+            !whole(index) ||
+            index >= order.components.length
+          ) return;
 
           const component = order.components[index];
+
           const format = FLYER_FORMATS.find(
             item => item.id === button.dataset.value
           );
@@ -4445,6 +6090,7 @@
 
           component.w = format.w;
           component.h = format.h;
+
           selectedMethod = null;
           renderAll();
           break;
@@ -4452,11 +6098,17 @@
 
         case "flyer-density": {
           if (order.product !== "flyer") return;
+
           const index = Number(button.dataset.index);
           const density = Number(button.dataset.value);
-          if (!whole(index) || index >= order.components.length) return;
+
+          if (
+            !whole(index) ||
+            index >= order.components.length
+          ) return;
 
           const component = order.components[index];
+
           if (
             !component.enabled ||
             !flyerDensities(component, cfg).includes(density)
@@ -4474,9 +6126,11 @@
 
         case "layout-svg":
           if (!previewState?.svg) return;
+
           download(
             "SlonPress_Листовки_размещение.svg",
-            '<?xml version="1.0" encoding="UTF-8"?>\n' + previewState.svg,
+            '<?xml version="1.0" encoding="UTF-8"?>\n' +
+              previewState.svg,
             "image/svg+xml;charset=utf-8"
           );
           break;
@@ -4485,9 +6139,16 @@
           Object.assign(
             order.bag,
             button.dataset.value === "large"
-              ? { a: 300, b: 400, c: 120, type: "half" }
-              : { a: 250, b: 350, c: 100, type: "full" }
+              ? {
+                a: 300, b: 400, c: 120,
+                type: "half"
+              }
+              : {
+                a: 250, b: 350, c: 100,
+                type: "full"
+              }
           );
+
           order.bag.confirmPhysical = false;
           selectedMethod = null;
           renderAll();
@@ -4495,7 +6156,13 @@
 
         case "bag-svg": {
           const svg = bagSVG(order.bag, true);
-          if (!svg) return toast("Сначала заполните размеры пакета.");
+
+          if (!svg) {
+            return toast(
+              "Сначала заполните размеры пакета."
+            );
+          }
+
           download(
             "SlonPress_Пакет_развёртка.svg",
             '<?xml version="1.0" encoding="UTF-8"?>\n' + svg,
@@ -4508,8 +6175,11 @@
           if (!advancedComponents()) return;
 
           if (order.product === "threeinone") {
-            return toast("Календарь 3 в 1 содержит одну печатную основу.");
+            return toast(
+              "Календарь 3 в 1 содержит одну печатную основу."
+            );
           }
+
           if (order.components.length >= 100) {
             return toast("Максимум — 100 компонентов.");
           }
@@ -4521,24 +6191,38 @@
 
         case "component-remove": {
           if (!advancedComponents()) return;
+
           const index = Number(button.dataset.index);
-          if (!whole(index) || index >= order.components.length) return;
+
+          if (
+            !whole(index) ||
+            index >= order.components.length
+          ) return;
 
           const component = order.components[index];
 
           if (
             order.product === "threeinone" ||
-            (order.product === "paket" && component.role === "bag") ||
+            (
+              order.product === "paket" &&
+              component.role === "bag"
+            ) ||
             managedTentComponent(order, component)
           ) {
-            return toast("Этот компонент управляется комплектацией изделия.");
+            return toast(
+              "Этот компонент управляется комплектацией изделия."
+            );
           }
 
           if (order.components.length <= 1) {
-            return toast("Оставьте хотя бы один компонент.");
+            return toast(
+              "Оставьте хотя бы один компонент."
+            );
           }
 
-          if (!confirm("Удалить компонент «" + component.name + "»?")) return;
+          if (!confirm(
+            "Удалить компонент «" + component.name + "»?"
+          )) return;
 
           order.components.splice(index, 1);
           selectedMethod = null;
@@ -4548,36 +6232,53 @@
 
         case "method":
           if (!pro) return;
+
           selectedMethod = id;
           recalculate();
           break;
 
         case "method-auto":
           if (!pro) return;
+
           selectedMethod = null;
           recalculate();
           break;
 
         case "copy":
           recalculate();
-          if (!chosen) return toast("Нет корректного расчёта.");
+
+          if (!chosen) {
+            return toast("Нет корректного расчёта.");
+          }
+
           copyText(quote());
           break;
 
         case "print": {
           recalculate();
-          if (!chosen) return toast("Нет корректного расчёта.");
+
+          if (!chosen) {
+            return toast("Нет корректного расчёта.");
+          }
 
           const details = $("result-spec");
           const wasOpen = details?.open ?? false;
+
           if (details) details.open = true;
 
           const restore = () => {
-            if (details?.isConnected) details.open = wasOpen;
-            window.removeEventListener("afterprint", restore);
+            if (details?.isConnected) {
+              details.open = wasOpen;
+            }
+
+            window.removeEventListener(
+              "afterprint", restore
+            );
           };
 
-          window.addEventListener("afterprint", restore);
+          window.addEventListener(
+            "afterprint", restore
+          );
 
           try {
             window.print();
@@ -4585,6 +6286,7 @@
             restore();
             throw error;
           }
+
           break;
         }
 
@@ -4594,7 +6296,10 @@
 
         case "template-save":
           saveTemplate();
-          if (dialogView === "templates") templatesDialog();
+
+          if (dialogView === "templates") {
+            templatesDialog();
+          }
           break;
 
         case "saved-open":
@@ -4623,7 +6328,7 @@
 
         case "use-current": {
           if (!confirm(
-            "Применить текущие базовые цены?\n\n" +
+            "Применить текущие базовые цены и плавную шкалу наценки?\n\n" +
             "Ручные цены бумаги, штампов, клише, сборки, " +
             "комплектующих и прочих расходов будут заменены.\n\n" +
             "Размеры и плотности останутся прежними. " +
@@ -4635,44 +6340,72 @@
           const nextConfig = clone(current);
           const nextDerived = derive(repriced, nextConfig);
 
-          // Проверяем целостность, но позволяем открыть рабочую
-          // копию с устаревшей плотностью и исправить её в форме.
           const errors = validateOrder(
             nextDerived,
             nextConfig,
             { snapshot: true }
           );
 
-          if (errors.length) throw new Error(errors.join("\n"));
+          if (errors.length) {
+            throw new Error(errors.join("\n"));
+          }
 
           order = repriced;
           cfg = nextConfig;
           archived = false;
           selectedMethod = null;
+
           renderAll();
-          toast("Применены текущие тарифы. Проверьте параметры и расходы.");
+
+          toast(
+            "Применены текущие тарифы и плавная шкала. " +
+            "Проверьте параметры и расходы."
+          );
           break;
         }
 
         case "saved-item-copy": {
-          const item = saved.find(entry => entry.id === id);
+          const item = saved.find(
+            entry => entry.id === id
+          );
+
           if (item) copyText(item.quote);
           break;
         }
 
         case "saved-copy": {
-          const selected = saved.filter(entry => selectedSaved.has(entry.id));
-          const items = selected.length ? selected : saved;
-          if (!items.length) return toast("Нет сохранённых расчётов.");
+          const selected = saved.filter(
+            entry => selectedSaved.has(entry.id)
+          );
 
-          copyText(items.map(entry => entry.quote).join("\n\n──────────\n\n"));
+          const items = selected.length
+            ? selected
+            : saved;
+
+          if (!items.length) {
+            return toast("Нет сохранённых расчётов.");
+          }
+
+          copyText(
+            items.map(entry => entry.quote)
+              .join("\n\n──────────\n\n")
+          );
           break;
         }
 
         case "saved-delete":
-          if (!saved.some(entry => entry.id === id)) return;
-          if (!confirm("Удалить сохранённый расчёт?")) return;
-          saved = saved.filter(entry => entry.id !== id);
+          if (!saved.some(entry => entry.id === id)) {
+            return;
+          }
+
+          if (!confirm("Удалить сохранённый расчёт?")) {
+            return;
+          }
+
+          saved = saved.filter(
+            entry => entry.id !== id
+          );
+
           selectedSaved.delete(id);
           persist();
           updateCounts();
@@ -4680,26 +6413,43 @@
           break;
 
         case "saved-clear":
-          if (!saved.length) return toast("Сохранённых расчётов нет.");
-          if (!confirm("Удалить все сохранённые расчёты? Шаблоны останутся.")) return;
+          if (!saved.length) {
+            return toast("Сохранённых расчётов нет.");
+          }
+
+          if (!confirm(
+            "Удалить все сохранённые расчёты? " +
+            "Шаблоны останутся."
+          )) return;
+
           saved = [];
           selectedSaved.clear();
+
           persist();
           updateCounts();
           savedDialog();
           break;
 
         case "template-delete":
-          if (!templates.some(entry => entry.id === id)) return;
+          if (!templates.some(entry => entry.id === id)) {
+            return;
+          }
+
           if (!confirm("Удалить шаблон?")) return;
-          templates = templates.filter(entry => entry.id !== id);
+
+          templates = templates.filter(
+            entry => entry.id !== id
+          );
+
           persist();
           templatesDialog();
           break;
 
         case "export":
           download(
-            "SlonPress_" + new Date().toISOString().slice(0, 10) + ".json",
+            "SlonPress_" +
+              new Date().toISOString().slice(0, 10) +
+              ".json",
             JSON.stringify(database(), null, 2),
             "application/json;charset=utf-8"
           );
@@ -4708,29 +6458,50 @@
         case "import":
           $("importFile").click();
           break;
+
+        default:
+          break;
       }
     } catch (error) {
       console.error(error);
-      toast("Действие не выполнено: " + error.message);
+
+      toast(
+        "Действие не выполнено: " + error.message
+      );
     }
   });
 
   // ============================================================
-  // НАЗВАНИЕ И ПРАВИЛА
+  // НАЗВАНИЕ И ПРАВИЛА ИНТЕРФЕЙСА
   // ============================================================
 
   function applyBranding() {
-    document.title = "SlonPress.ru — калькулятор полиграфии";
+    document.title =
+      "SlonPress.ru — калькулятор полиграфии";
 
-    const brandName = document.querySelector(".brand strong");
-    if (brandName) brandName.textContent = "SlonPress.ru";
+    const brandName = document.querySelector(
+      ".brand strong"
+    );
 
-    const brandMark = document.querySelector(".brand-mark");
-    if (brandMark) brandMark.textContent = "S";
+    if (brandName) {
+      brandName.textContent = "SlonPress.ru";
+    }
 
-    const footerName = document.querySelector(".page-footer > span:first-child");
+    const brandMark = document.querySelector(
+      ".brand-mark"
+    );
+
+    if (brandMark) {
+      brandMark.textContent = "S";
+    }
+
+    const footerName = document.querySelector(
+      ".page-footer > span:first-child"
+    );
+
     if (footerName) {
-      footerName.textContent = "SlonPress.ru · локальное хранение расчётов";
+      footerName.textContent =
+        "SlonPress.ru · локальное хранение расчётов";
     }
 
     const rulesBody = document.querySelector(
@@ -4743,71 +6514,108 @@
           Расчёт предварительный. Материалы, оборудование,
           раскладку и макет проверяет технолог.
         </p>
+
         <p>
           Прямоугольная раскладка проверяет две ориентации.
           Смешанное размещение, направление волокна,
-          производственный спуск полос и особенности захвата машины
-          автоматически не рассчитываются.
+          производственный спуск полос и особенности
+          захвата машины автоматически не рассчитываются.
         </p>
+
         <p>
-          Листовки: допустимые плотности и цены материалов берутся
-          из prices.js. Дизайнерская бумага — только SRA3.
-          Бумажная самоклейка — SRA3, 470×620 и 500×700 мм.
+          Листовки: допустимые плотности и цены материалов
+          берутся из prices.js. Дизайнерская бумага —
+          только SRA3. Бумажная самоклейка — SRA3,
+          470×620 и 500×700 мм.
           Плёнка в листовках недоступна.
         </p>
+
         <p>
-          Кнопка «Размещение на листе» показывает геометрическую
-          вместимость выбранного листа с учётом вылетов.
-          Печатная область условно расположена по центру.
+          Кнопка «Размещение на листе» показывает
+          геометрическую вместимость выбранного листа
+          с учётом вылетов. Печатная область условно
+          расположена по центру.
           Это не готовый производственный спуск.
         </p>
+
         <p>
           Брошюра задаётся в готовом размере страницы.
           Расчёт выполняется по разворотам.
-          Полосы блока указываются без обложки, кратно четырём.
-          Расчётный спуск необходимо проверить перед производством.
+          Полосы блока указываются без обложки,
+          кратно четырём. Расчётный спуск необходимо
+          проверить перед производством.
         </p>
+
         <p>
-          Цифра SRA3 и B2: бумага и оттиски считаются без отдельной
-          платы за приладку печати. Технологический запас берётся
-          из справочника. Настройки резки, ламинации и других операций
+          Цифра SRA3 и B2: бумага и оттиски считаются
+          без отдельной платы за приладку печати.
+          Технологический запас берётся из справочника.
+          Настройки резки, ламинации и других операций
           могут оплачиваться отдельно.
         </p>
+
         <p>
-          Плоттер рассчитывается по секциям 320×450 мм с учётом полей.
-          Приладочный запас не отправляется на плоттер.
-          Для листовок минимум применяется один раз на весь заказ
-          до общей наценки. Обычная резка компонента при включённом
-          плоттере не начисляется. Сложность контура не оценивается.
+          Плоттер рассчитывается по секциям 320×450 мм
+          с учётом полей. Приладочный запас не отправляется
+          на плоттер. Для листовок минимум применяется
+          один раз на весь заказ до наценки.
+          Обычная резка компонента при включённом плоттере
+          не начисляется. Сложность контура не оценивается.
         </p>
+
         <p>
           Домики: А5 — перекидные листы 210×148 мм,
-          квадрат — 205×205 мм. Основание задаётся отдельно.
-          Размер и цена покупного блока Полимат берутся из prices.js.
+          квадрат — 205×205 мм.
+          Основание задаётся отдельно.
+          Размер и цена покупного блока Полимат
+          берутся из prices.js.
           Покупной блок оплачивается один раз на календарь.
           Верхняя обложка печатается отдельно.
         </p>
+
         <p>
           Число изделий на штампе задаётся вручную.
           Совместимость штампа с раскладкой нужно проверить.
-          Биговку, входящую в вырубку, не добавляйте повторно.
+          Биговку, входящую в вырубку,
+          не добавляйте повторно.
         </p>
+
+        <p>
+          Новая обычная полиграфия использует плавную
+          шкалу наценки по себестоимости всего заказа.
+          Между точками линейно меняется сумма прибыли.
+          Округление продажной цены — вверх до 1 ₽.
+          УФ использует готовые продажные тарифы
+          без дополнительной наценки.
+        </p>
+
         <p>
           Прибыль указана до налогов и неучтённых расходов.
           НДС отдельно не выделяется.
-          УФ использует продажные тарифы без общей наценки.
         </p>
+
         <p>
           Документы и шаблоны хранятся в этом браузере.
           Для переноса используйте экспорт.
           Старый заказ открывается как рабочая копия
-          с архивными тарифами и текущими формулами и ограничениями.
+          с архивными тарифами и правилом цены
+          из сохранённого снимка, но с текущими формулами
+          производства и ограничениями.
           Исходный сохранённый документ не изменяется.
         </p>
+
         <p>
-          Пароль профессионального режима ограничивает только интерфейс.
-          Это не серверная авторизация. Исходный код и файл тарифов
-          технически доступны посетителю.
+          Для применения новой шкалы к архиву используйте
+          «Пересчитать по текущим тарифам».
+          Шаблоны открываются с текущими ценами
+          и текущей шкалой.
+        </p>
+
+        <p>
+          Пароль профессионального режима ограничивает
+          только интерфейс. Это не серверная авторизация.
+          Исходный код и файл тарифов технически доступны
+          посетителю.
         </p>
       `;
     }
@@ -4817,71 +6625,137 @@
   // ЗАПУСК
   // ============================================================
 
-  try {
-    $("importFile").addEventListener("change", event => {
-      if (ready) importFile(event.target.files?.[0]);
-    });
+  function init() {
+    try {
+      $("importFile").addEventListener("change", event => {
+        if (ready) {
+          importFile(event.target.files?.[0]);
+        }
+      });
 
-    $("managerDialog").addEventListener("close", () => {
-      dialogView = "";
-      previewState = null;
-      const password = $("professionalPassword");
-      if (password) password.value = "";
-    });
+      $("managerDialog").addEventListener("close", () => {
+        dialogView = "";
+        previewState = null;
 
-    applyBranding();
+        const password = $("professionalPassword");
 
-    const configErrors = validateConfig(window.PRINT_PRICES);
-    if (configErrors.length) {
-      throw new Error(configErrors.join("\n"));
-    }
+        if (password) {
+          password.value = "";
+        }
+      });
 
-    current = clone(window.PRINT_PRICES);
-    cfg = clone(current);
+      applyBranding();
 
-    for (const [id] of PRODUCTS) {
-      const sample = baseOrder(id, current);
-      const errors = validateOrder(derive(sample, current), current);
+      const configErrors = validateConfig(
+        window.PRINT_PRICES
+      );
 
-      if (errors.length) {
-        throw new Error(product(id)[1] + ": " + errors.join("\n"));
+      if (configErrors.length) {
+        throw new Error(configErrors.join("\n"));
+      }
+
+      current = clone(window.PRINT_PRICES);
+
+      // Только новый рабочий справочник получает новую шкалу.
+      // Архивные снимки в базе не модифицируются.
+      usesBuiltInScale =
+        current.markupScale === undefined;
+
+      if (usesBuiltInScale) {
+        current.markupScale = clone(
+          DEFAULT_MARKUP_SCALE
+        );
+      }
+
+      // Согласованное округление новых обычных расчётов.
+      current.rates.rounding = 1;
+
+      const activeConfigErrors = validateConfig(current);
+
+      if (activeConfigErrors.length) {
+        throw new Error(
+          activeConfigErrors.join("\n")
+        );
+      }
+
+      cfg = clone(current);
+
+      for (const [id] of PRODUCTS) {
+        const sample = baseOrder(id, current);
+
+        const errors = validateOrder(
+          derive(sample, current),
+          current
+        );
+
+        if (errors.length) {
+          throw new Error(
+            product(id)[1] + ": " +
+            errors.join("\n")
+          );
+        }
+      }
+
+      order = baseOrder("flyer", cfg);
+
+      loadStorage();
+      renderAll();
+
+      ready = true;
+    } catch (error) {
+      ready = false;
+      console.error(error);
+
+      const content = document.querySelector(
+        ".content"
+      );
+
+      if (content) {
+        content.innerHTML = `
+          <section class="card">
+            <div class="card-body">
+              <h1>Не удалось запустить калькулятор</h1>
+
+              <p class="subtitle">
+                Проверьте файл prices.js,
+                порядок подключения скриптов
+                и консоль браузера.
+              </p>
+
+              <div class="error section-gap">
+                ${String(error.message)
+                  .split("\n")
+                  .map(text => `
+                    <div>${esc(text)}</div>
+                  `).join("")}
+              </div>
+
+              <p class="small section-gap">
+                Сначала должен подключаться prices.js,
+                затем calculator.js.
+                Сохранённые данные браузера
+                автоматически не удаляются.
+              </p>
+            </div>
+          </section>
+        `;
+      }
+
+      const mobileTotal = $("mobileTotal");
+
+      if (mobileTotal) {
+        mobileTotal.hidden = true;
       }
     }
+  }
 
-    order = baseOrder("flyer", cfg);
-    loadStorage();
-    renderAll();
-    ready = true;
-  } catch (error) {
-    ready = false;
-    console.error(error);
-
-    const content = document.querySelector(".content");
-    if (content) {
-      content.innerHTML = `
-        <section class="card">
-          <div class="card-body">
-            <h1>Не удалось запустить калькулятор</h1>
-            <p class="subtitle">
-              Проверьте файл prices.js, порядок подключения
-              скриптов и консоль браузера.
-            </p>
-            <div class="error section-gap">
-              ${String(error.message).split("\n").map(text => `
-                <div>${esc(text)}</div>
-              `).join("")}
-            </div>
-            <p class="small section-gap">
-              Сначала должен подключаться prices.js,
-              затем calculator.js.
-              Сохранённые данные браузера автоматически не удаляются.
-            </p>
-          </div>
-        </section>
-      `;
-    }
-
-    const mobileTotal = $("mobileTotal");
-    if (mobileTotal) mobileTotal.hidden = true;
+  if (document.readyState === "loading") {
+    document.addEventListener(
+      "DOMContentLoaded",
+      init,
+      { once: true }
+    );
+  } else {
+    init();
   }
 })();
