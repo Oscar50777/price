@@ -442,20 +442,39 @@ window.PRINT_PRICES = {
     },
 
     quarter: {
-      assembly: 50, assemblySetup: 300, accessories: 0, extra: 0,
-      accessoriesNote: "",
-      components: [
-        {
-          name: "Топпер", role: "header",
-          w: 297, h: 210, lamination: "gloss"
-        },
-        {
-          name: "Подложки", role: "backing",
-          w: 297, h: 210, units: 3,
-          color: "none", paper: "cardboard"
-        }
-      ]
+  assembly: 50,
+  assemblySetup: 300,
+  accessories: 0,
+  extra: 0,
+  accessoriesNote: "",
+
+  components: [
+    {
+      name: "Топпер + нижнее рекламное поле",
+      role: "header",
+      w: 297,
+      h: 210,
+      units: 2,
+      paper: "cardboard",
+      density: 300,
+      color: "4+0",
+      lamination: "gloss",
+      lamSides: 1
     },
+    {
+      name: "Подложки",
+      role: "backing",
+      w: 297,
+      h: 210,
+      units: 2,
+      paper: "cardboard",
+      density: 300,
+      color: "4+0",
+      lamination: "gloss",
+      lamSides: 1
+    }
+  ]
+},
 
     threeinone: {
       assembly: 40, assemblySetup: 0, accessories: 0, extra: 0,
