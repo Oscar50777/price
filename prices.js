@@ -704,3 +704,45 @@ for (const productSettings of Object.values(
     }
   }
 }
+
+/*
+ * ПЛАВНАЯ ШКАЛА НАЦЕНКИ
+ *
+ * cost — себестоимость всего заказа, руб.
+ * percent — наценка на себестоимость в этой точке, %.
+ *
+ * Между точками линейно изменяется сумма прибыли.
+ * До первой точки применяется процент первой точки.
+ * После последней точки применяется процент последней точки.
+ *
+ * УФ-печать использует готовые продажные тарифы:
+ * эта шкала к ней не применяется.
+ */
+
+window.PRINT_PRICES.markupScale = [
+  { cost: 1000,  percent: 80 },
+  { cost: 2000,  percent: 45 },
+  { cost: 3000,  percent: 40 },
+  { cost: 4000,  percent: 37 },
+  { cost: 5000,  percent: 35 },
+  { cost: 6000,  percent: 33 },
+  { cost: 7000,  percent: 31 },
+  { cost: 8000,  percent: 30 },
+  { cost: 9000,  percent: 28 },
+  { cost: 10000, percent: 27 },
+  { cost: 11000, percent: 26 },
+  { cost: 15000, percent: 24 },
+  { cost: 21000, percent: 22 },
+  { cost: 30000, percent: 20 },
+  { cost: 40000, percent: 18 },
+  { cost: 50000, percent: 17 },
+  { cost: 60000, percent: 16 },
+  { cost: 70000, percent: 15 }
+];
+
+// Округление продажной цены вверх до одного рубля.
+window.PRINT_PRICES.rates.rounding = 1;
+
+// Версия справочника с новой шкалой.
+window.PRINT_PRICES.meta.version = "2026-09-22.1";
+window.PRINT_PRICES.meta.updated = "2026-09-22";
