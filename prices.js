@@ -367,7 +367,7 @@ window.PRINT_PRICES = {
 
     paket: {
       assembly: 40, assemblySetup: 300, accessories: 10, extra: 0,
-      accessoriesNote: "Ручки и усилители",
+      accessoriesNote: "Шнур 6 мм, донышки + подручники картон 300 г",
       components: [
         {
           name: "Развёртка пакета", role: "bag",
