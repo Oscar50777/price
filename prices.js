@@ -37,7 +37,7 @@ window.PRINT_PRICES = {
   sheets: [
     {
       id: "Z", label: "Цифра SRA3",
-      w: 320, h: 450, pw: 310, ph: 430, group: "digital"
+      w: 320, h: 450, pw: 310, ph: 440, group: "digital"
     },
     {
       id: "E", label: "Цифра B2",
