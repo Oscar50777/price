@@ -1021,7 +1021,7 @@
       };
     }
 
-    if (b.a === 250 && b.b === 350 && b.c === 100) {
+    if (b.a === 230 && b.b === 350 && b.c === 100) {
       rule = {
         type: "full",
         allowed: ["E", "M"],
@@ -2581,7 +2581,7 @@
             30×40×12 см
           </button>
           <button data-action="bag-preset" data-value="small">
-            25×35×10 см
+            23×35×10 см
           </button>
         </div>
 
@@ -6144,7 +6144,7 @@
                 type: "half"
               }
               : {
-                a: 250, b: 350, c: 100,
+                a: 230, b: 350, c: 100,
                 type: "full"
               }
           );
