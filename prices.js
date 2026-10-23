@@ -400,23 +400,26 @@ window.PRINT_PRICES = {
     },
 
     broshyura: {
-      assembly: 15, assemblySetup: 300, accessories: 1, extra: 0,
-      accessoriesNote: "Скобы",
-      components: [
-        {
-          name: "Обложка", role: "cover",
-          w: 148, h: 210, color: "4+4",
-          lamination: "gloss", folding: true,
-          score: true, scoreCount: 1
-        },
-        {
-          name: "Внутренний блок", role: "block",
-          w: 148, h: 210, mode: "pages", pages: 32,
-          color: "4+4", density: 130, priceKg: 135,
-          folding: true
-        }
-      ]
+  assembly: 15, assemblySetup: 300, accessories: 1, extra: 0,
+  accessoriesNote: "Скобы",
+  components: [
+    {
+      name: "Обложка", role: "cover",
+      w: 148, h: 210, color: "4+4",
+      lamination: "gloss",
+      folding: false,
+      score: false,
+      scoreCount: 1
     },
+    {
+      name: "Внутренний блок", role: "block",
+      w: 148, h: 210, mode: "pages", pages: 32,
+      color: "4+4", density: 130, priceKg: 135,
+      folding: false,
+      score: false
+    }
+  ]
+},
 
     papka: {
       assembly: 8, assemblySetup: 300, accessories: 0, extra: 0,
