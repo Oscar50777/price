@@ -17,24 +17,24 @@
   const DATABASE_VERSION = 1;
 
   const DEFAULT_MARKUP_SCALE = [
-    { cost: 1000, percent: 80 },
-    { cost: 2000, percent: 45 },
-    { cost: 3000, percent: 40 },
-    { cost: 4000, percent: 37 },
-    { cost: 5000, percent: 35 },
-    { cost: 6000, percent: 33 },
-    { cost: 7000, percent: 31 },
-    { cost: 8000, percent: 30 },
-    { cost: 9000, percent: 28 },
-    { cost: 10000, percent: 27 },
-    { cost: 11000, percent: 26 },
-    { cost: 15000, percent: 24 },
-    { cost: 21000, percent: 22 },
-    { cost: 30000, percent: 20 },
-    { cost: 40000, percent: 18 },
-    { cost: 50000, percent: 17 },
-    { cost: 60000, percent: 16 },
-    { cost: 70000, percent: 15 }
+    { cost: 1000, percent: 100 },
+    { cost: 2000, percent: 100 },
+    { cost: 3000, percent: 70 },
+    { cost: 4000, percent: 50 },
+    { cost: 5000, percent: 50 },
+    { cost: 6000, percent: 40 },
+    { cost: 7000, percent: 35 },
+    { cost: 8000, percent: 33 },
+    { cost: 9000, percent: 30 },
+    { cost: 10000, percent: 29 },
+    { cost: 11000, percent: 28 },
+    { cost: 15000, percent: 26 },
+    { cost: 21000, percent: 24 },
+    { cost: 30000, percent: 22 },
+    { cost: 40000, percent: 20 },
+    { cost: 50000, percent: 20 },
+    { cost: 60000, percent: 18 },
+    { cost: 70000, percent: 17 }
   ];
 
   const $ = id => document.getElementById(id);
