@@ -366,7 +366,7 @@ window.PRINT_PRICES = {
     },
 
     paket: {
-      assembly: 40, assemblySetup: 300, accessories: 10, extra: 0,
+      assembly: 60, assemblySetup: 300, accessories: 15, extra: 0,
       accessoriesNote: "Шнур 6 мм, донышки + подручники картон 300 г",
       components: [
         {
