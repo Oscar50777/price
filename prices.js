@@ -126,33 +126,33 @@ window.PRINT_PRICES = {
 
     // Резка: руб./печатный лист и настройка на компонент.
     cutting: 1,
-    cuttingSetup: 300,
+    cuttingSetup: 500,
 
     // Ламинация: руб./лист/сторона.
-    lamination: 12,
+    lamination: 15,
     softDigital: 30,
     softOther: 50,
     laminationSetup: 300,
 
     // Биговка: руб./биг.
-    score: 2,
+    score: 3,
     scoreSetup: 300,
 
     // Фальцовка: руб./элемент.
-    folding: 1,
+    folding: 2,
     foldingSetup: 300,
 
     // Вырубка: руб./удар.
-    diecut: 5,
-    diecutSetup: 5000,
+    diecut: 6,
+    diecutSetup: 7000,
 
     // УФ-лак: руб./печатный лист.
-    uv: 10,
-    uvSetup: 5000,
+    uv: 20,
+    uvSetup: 8000,
 
     // Тиснение: руб./элемент.
-    emboss: 10,
-    embossSetup: 4500,
+    emboss: 20,
+    embossSetup: 8000,
 
     // Округление продажной цены вверх.
     // 0 — до копеек.
@@ -161,10 +161,10 @@ window.PRINT_PRICES = {
 
   extra: {
     // Сборка блокнотов, руб./изделие.
-    notebookA6: 30,
-    notebookA5: 35,
-    notebookA4: 40,
-    notebookCustom: 40,
+    notebookA6: 50,
+    notebookA5: 60,
+    notebookA4: 70,
+    notebookCustom: 50,
 
     brochureAssembly: 15,
     wallAssembly: 100,
@@ -180,9 +180,9 @@ window.PRINT_PRICES = {
     plotterMargin: 5,
 
     // Квартальные календари, руб./изделие.
-    quarterMiniAssembly: 50,
-    quarterMidiAssembly: 60,
-    quarterMaxiAssembly: 70,
+    quarterMiniAssembly: 70,
+    quarterMidiAssembly: 80,
+    quarterMaxiAssembly: 90,
 
     quarterMiniMagnet: 140,
     quarterMidiMagnet: 150,
